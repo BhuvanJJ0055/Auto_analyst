@@ -76,6 +76,8 @@ def test_profile_messy_sales_anomalies_and_score() -> None:
     # Acceptance criterion: messy_sales shows a clearly lower quality score than clean_sales
     clean_score = clean_profile["quality_score"]["score"]
     messy_score = messy_profile["quality_score"]["score"]
+    assert clean_score >= 95.0, f"Clean score ({clean_score}) should be >= 95.0"
+    assert messy_score < 80.0, f"Messy score ({messy_score}) should be < 80.0"
     assert (
         messy_score < clean_score - 15.0
     ), f"Messy score ({messy_score}) should be substantially lower than clean score ({clean_score})"
