@@ -36,6 +36,7 @@ This document tracks phase-by-phase implementation status, test results, accepta
   - `large.csv`: 200,000 records for high-volume benchmark testing (git-ignored).
 - [x] Developed initial Streamlit landing application (`app.py`) with pipeline stage visualizer and sample dataset preview.
 - [x] Implemented unit test suite in `tests/` covering dataset integrity, byte formatting, color palettes, and application compilation.
+- [x] Enhanced dark theme styling for overview cards (#161B22 background, #30363D border, white titles, #C9D1D9 text) and captured UI screenshot in `docs/overview_dark_mode.png`.
 - [x] Created `README.md`, `CHANGELOG.md`, `PROGRESS.md`, and `docs/architecture.md`.
 
 ### Acceptance Criteria Checklist
