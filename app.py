@@ -94,6 +94,54 @@ st.markdown(
     .grade-C { background: #4D2D00; color: #D29922; border: 1px solid #9E6A03; }
     .grade-D { background: #4D1B0C; color: #DB6D28; border: 1px solid #BD561D; }
     .grade-F { background: #490202; color: #F85149; border: 1px solid #DA3633; }
+    .metric-card {
+        background: #161B22;
+        border: 1px solid #30363D;
+        border-radius: 8px;
+        padding: 0.85rem 1rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        min-height: 94px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+    .metric-label {
+        font-size: 0.75rem;
+        color: #8B949E;
+        text-transform: uppercase;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }
+    .metric-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #FFFFFF;
+        line-height: 1.2;
+    }
+    .metric-status {
+        font-size: 0.8rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+    .status-good {
+        color: #3FB950;
+    }
+    .status-warning {
+        color: #D29922;
+    }
+    .status-danger {
+        color: #F85149;
+    }
+    .status-neutral {
+        color: #8B949E;
+    }
+    .metric-denom {
+        font-size: 0.92rem;
+        color: #8B949E;
+        font-weight: 500;
+    }
     button[data-baseweb="tab"] {
         color: #8B949E !important;
     }
@@ -226,14 +274,15 @@ if df_loaded is not None and ingestion_meta is not None:
     with top_col1:
         st.markdown(
             f"""
-            <div class="card" style="padding: 1rem 1.25rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="metric-card" style="padding: 0.85rem 1.1rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;
+                height: 100%;">
                     <div>
-                        <div style="font-size: 0.85rem; color: #8B949E; text-transform: uppercase;
-                        font-weight: 600;">Data Quality Score</div>
-                        <div style="font-size: 1.85rem; font-weight: 700; color: #FFFFFF;">
-                            {score_val} <span style="font-size: 1rem; color: #8B949E;">/ 100</span>
+                        <div class="metric-label">Data Quality Score</div>
+                        <div class="metric-value">
+                            {score_val} <span class="metric-denom">/ 100</span>
                         </div>
+                        <div class="metric-status status-neutral">Automated Audit</div>
                     </div>
                     <span class="score-badge grade-{grade}">{grade}</span>
                 </div>
@@ -243,21 +292,76 @@ if df_loaded is not None and ingestion_meta is not None:
         )
 
     with top_col2:
-        st.metric("Total Rows", f"{profile['total_rows']:,}")
-    with top_col3:
-        st.metric("Total Columns", f"{profile['total_columns']:,}")
-    with top_col4:
-        st.metric(
-            "Duplicate Rows", f"{profile['duplicate_rows']:,}", f"{profile['duplicate_pct']}%"
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <div class="metric-label">Total Rows</div>
+                <div class="metric-value">{profile['total_rows']:,}</div>
+                <div class="metric-status status-neutral">Dataset records</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
+
+    with top_col3:
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <div class="metric-label">Total Columns</div>
+                <div class="metric-value">{profile['total_columns']:,}</div>
+                <div class="metric-status status-neutral">Profiled features</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with top_col4:
+        dup_cnt = profile["duplicate_rows"]
+        dup_pct = profile["duplicate_pct"]
+        if dup_cnt == 0:
+            dup_badge = '<div class="metric-status status-good">✓ 0.0% duplicates</div>'
+        elif dup_pct <= 5.0:
+            dup_badge = f'<div class="metric-status status-warning">▲ {dup_pct}% duplicates</div>'
+        else:
+            dup_badge = f'<div class="metric-status status-danger">▲ {dup_pct}% duplicates</div>'
+
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <div class="metric-label">Duplicate Rows</div>
+                <div class="metric-value">{dup_cnt:,}</div>
+                {dup_badge}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
     with top_col5:
+        missing_cnt = profile["total_missing_cells"]
         total_cells_count = profile["total_rows"] * profile["total_columns"]
-        missing_rate_pct = round((profile["total_missing_cells"] / total_cells_count) * 100, 2)
-        st.metric(
-            "Missing Cells",
-            f"{profile['total_missing_cells']:,}",
-            f"{missing_rate_pct}%",
-            delta_color="inverse",
+        missing_rate_pct = (
+            round((missing_cnt / total_cells_count) * 100, 2) if total_cells_count > 0 else 0.0
+        )
+        if missing_cnt == 0:
+            missing_badge = '<div class="metric-status status-good">✓ 0.0% missing</div>'
+        elif missing_rate_pct <= 5.0:
+            missing_badge = (
+                f'<div class="metric-status status-warning">▲ {missing_rate_pct}% missing</div>'
+            )
+        else:
+            missing_badge = (
+                f'<div class="metric-status status-danger">▲ {missing_rate_pct}% missing</div>'
+            )
+
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <div class="metric-label">Missing Cells</div>
+                <div class="metric-value">{missing_cnt:,}</div>
+                {missing_badge}
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
     # Tabs Section
@@ -273,30 +377,72 @@ if df_loaded is not None and ingestion_meta is not None:
     with tab_overview:
         st.subheader("Data Health & Quality Breakdown")
 
+        def make_breakdown_status(score: float, max_score: float, label: str) -> str:
+            ratio = round((score / max_score) * 100, 1)
+            if ratio >= 99.9:
+                return f'<div class="metric-status status-good">✓ 100% {label}</div>'
+            elif ratio >= 80.0:
+                return f'<div class="metric-status status-warning">▲ {ratio}% {label}</div>'
+            else:
+                return f'<div class="metric-status status-danger">▲ {ratio}% {label}</div>'
+
         q_col1, q_col2, q_col3, q_col4 = st.columns(4)
+        c_score = quality["completeness_score"]
+        u_score = quality["uniqueness_score"]
+        v_score = quality["validity_score"]
+        s_score = quality["consistency_score"]
+
         with q_col1:
-            st.metric(
-                "Completeness",
-                f"{quality['completeness_score']} / 30",
-                f"{quality['completeness_ratio']}% clean",
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-label">Completeness</div>
+                    <div class="metric-value">
+                        {c_score} <span class="metric-denom">/ 30</span>
+                    </div>
+                    {make_breakdown_status(c_score, 30, "clean")}
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
         with q_col2:
-            st.metric(
-                "Uniqueness",
-                f"{quality['uniqueness_score']} / 25",
-                f"{quality['uniqueness_ratio']}% unique",
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-label">Uniqueness</div>
+                    <div class="metric-value">
+                        {u_score} <span class="metric-denom">/ 25</span>
+                    </div>
+                    {make_breakdown_status(u_score, 25, "unique")}
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
         with q_col3:
-            st.metric(
-                "Validity",
-                f"{quality['validity_score']} / 25",
-                f"{quality['validity_ratio']}% valid",
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-label">Validity</div>
+                    <div class="metric-value">
+                        {v_score} <span class="metric-denom">/ 25</span>
+                    </div>
+                    {make_breakdown_status(v_score, 25, "valid")}
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
         with q_col4:
-            st.metric(
-                "Consistency",
-                f"{quality['consistency_score']} / 20",
-                f"{quality['consistency_ratio']}% consistent",
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-label">Consistency</div>
+                    <div class="metric-value">
+                        {s_score} <span class="metric-denom">/ 20</span>
+                    </div>
+                    {make_breakdown_status(s_score, 20, "consistent")}
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
         with st.expander("ℹ️ Data Quality Score Formula & Weights Breakdown"):
