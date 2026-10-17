@@ -3,7 +3,6 @@
 from pathlib import Path
 import json
 import pandas as pd
-import pytest
 
 SAMPLE_DATA_DIR = Path(__file__).resolve().parent.parent / "sample_data"
 
@@ -37,8 +36,12 @@ def test_clean_sales_properties() -> None:
     for col in expected_cols:
         assert col in df.columns, f"Expected column {col} missing from clean_sales"
 
-    assert (df["age"] >= 18).all() and (df["age"] <= 70).all(), "Ages in clean_sales should be within [18, 70]"
-    assert (df["discount"] >= 0).all() and (df["discount"] <= 100).all(), "Discounts must be valid percentages"
+    assert (df["age"] >= 18).all() and (
+        df["age"] <= 70
+    ).all(), "Ages in clean_sales should be within [18, 70]"
+    assert (df["discount"] >= 0).all() and (
+        df["discount"] <= 100
+    ).all(), "Discounts must be valid percentages"
 
 
 def test_messy_sales_defects() -> None:
@@ -56,7 +59,9 @@ def test_messy_sales_defects() -> None:
     # 2. Structural columns
     assert "store_code" in df.columns, "store_code constant column should be present"
     assert df["store_code"].nunique() == 1, "store_code should be constant"
-    assert "cancellation_notes" in df.columns, "cancellation_notes all-null column should be present"
+    assert (
+        "cancellation_notes" in df.columns
+    ), "cancellation_notes all-null column should be present"
     assert df["cancellation_notes"].isna().all(), "cancellation_notes should be all null"
 
     # 3. Missing values in 3 distinct columns
@@ -64,7 +69,9 @@ def test_messy_sales_defects() -> None:
     assert len(missing_cols) == 3, "Expected 3 columns with missing values"
 
     # 4. Currency strings in revenue
-    assert pd.api.types.is_string_dtype(df["revenue"]) or df["revenue"].dtype == object, "Revenue in messy_sales should be stored as string"
+    assert (
+        pd.api.types.is_string_dtype(df["revenue"]) or df["revenue"].dtype == object
+    ), "Revenue in messy_sales should be stored as string"
     has_symbols = df["revenue"].astype(str).str.contains(r"[₹$,]", regex=True).any()
     assert has_symbols, "Revenue should contain currency symbols or comma separators"
 

@@ -102,10 +102,14 @@ with st.sidebar:
     st.subheader("Sample Datasets")
     sample_dir = Path(__file__).resolve().parent / "sample_data"
     sample_files = sorted([f.name for f in sample_dir.glob("*.*") if f.name != "large.csv"])
-    selected_sample = st.selectbox("Explore Sample Benchmark Data", sample_files, index=0 if sample_files else None)
+    selected_sample = st.selectbox(
+        "Explore Sample Benchmark Data", sample_files, index=0 if sample_files else None
+    )
 
 # Main Content Tabs
-tab_overview, tab_preview, tab_specs = st.tabs(["🚀 Project Overview", "📂 Sample Data Preview", "📋 Technical Architecture"])
+tab_overview, tab_preview, tab_specs = st.tabs(
+    ["🚀 Project Overview", "📂 Sample Data Preview", "📋 Technical Architecture"]
+)
 
 with tab_overview:
     col1, col2, col3 = st.columns(3)
@@ -114,7 +118,8 @@ with tab_overview:
             """
             <div class="card">
                 <h4>🛡️ Non-Destructive Engine</h4>
-                <p>The original uploaded dataset is never modified. All transformations produce explicit copies accompanied by a forensic audit log.</p>
+                <p>The original uploaded dataset is never modified. All transformations produce
+                explicit copies accompanied by a forensic audit log.</p>
             </div>
             """,
             unsafe_allow_html=True,
@@ -124,7 +129,8 @@ with tab_overview:
             """
             <div class="card">
                 <h4>🤖 Zero-Hardcoding EDA</h4>
-                <p>Fully dynamic semantic type inference adapts to any tabular dataset (CSV, Excel, JSON, Parquet) without predetermined schemas.</p>
+                <p>Fully dynamic semantic type inference adapts to any tabular dataset
+                (CSV, Excel, JSON, Parquet) without predetermined schemas.</p>
             </div>
             """,
             unsafe_allow_html=True,
@@ -134,13 +140,17 @@ with tab_overview:
             """
             <div class="card">
                 <h4>⚡ Interactive Dashboards</h4>
-                <p>Sub-second filtering across 100k+ rows with KPI metrics, drill-downs, calculated fields, and offline HTML export.</p>
+                <p>Sub-second filtering across 100k+ rows with KPI metrics, drill-downs,
+                calculated fields, and offline HTML export.</p>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-    st.info("System setup is complete. To begin analyzing real-world datasets, proceed with Phase 1: Ingestion & Profiling.")
+    st.info(
+        "System setup is complete. To begin analyzing real-world datasets, "
+        "proceed with Phase 1: Ingestion & Profiling."
+    )
 
 with tab_preview:
     if selected_sample:
@@ -167,18 +177,60 @@ with tab_preview:
             with st.expander("Column Data Types"):
                 st.write(df.dtypes.astype(str))
     else:
-        st.warning("No sample datasets found. Run `python scripts/make_sample_data.py` to generate.")
+        st.warning(
+            "No sample datasets found. Run `python scripts/make_sample_data.py` to generate."
+        )
 
 with tab_specs:
     st.subheader("Component Pipeline Specification")
     specs_data = [
-        {"Phase": "Phase 0", "Component": "Setup & Benchmarks", "Status": "Completed", "Deliverable": "Scaffolding, sample data, tests, git flow"},
-        {"Phase": "Phase 1", "Component": "Ingestion & Profiling", "Status": "Next", "Deliverable": "Multi-format loader, type inference, quality score"},
-        {"Phase": "Phase 2", "Component": "Cleaning Engine", "Status": "Planned", "Deliverable": "Rule-based cleaning, outlier handling, audit trail"},
-        {"Phase": "Phase 3", "Component": "EDA & Visualization", "Status": "Planned", "Deliverable": "Univariate, bivariate, timeseries & Plotly charts"},
-        {"Phase": "Phase 4", "Component": "Insights Engine", "Status": "Planned", "Deliverable": "Numerical rule-based business insights"},
-        {"Phase": "Phase 5", "Component": "Interactive Dashboard", "Status": "Planned", "Deliverable": "PowerBI/Tableau style cards, charts, filters"},
-        {"Phase": "Phase 6", "Component": "Report & UI Assembly", "Status": "Planned", "Deliverable": "HTML report export, end-to-end integration"},
-        {"Phase": "Phase 7", "Component": "Hardening & Docs", "Status": "Planned", "Deliverable": "Stress tests, Docker, deployment, final v1.0.0"},
+        {
+            "Phase": "Phase 0",
+            "Component": "Setup & Benchmarks",
+            "Status": "Completed",
+            "Deliverable": "Scaffolding, sample data, tests, git flow",
+        },
+        {
+            "Phase": "Phase 1",
+            "Component": "Ingestion & Profiling",
+            "Status": "Next",
+            "Deliverable": "Multi-format loader, type inference, quality score",
+        },
+        {
+            "Phase": "Phase 2",
+            "Component": "Cleaning Engine",
+            "Status": "Planned",
+            "Deliverable": "Rule-based cleaning, outlier handling, audit trail",
+        },
+        {
+            "Phase": "Phase 3",
+            "Component": "EDA & Visualization",
+            "Status": "Planned",
+            "Deliverable": "Univariate, bivariate, timeseries & Plotly charts",
+        },
+        {
+            "Phase": "Phase 4",
+            "Component": "Insights Engine",
+            "Status": "Planned",
+            "Deliverable": "Numerical rule-based business insights",
+        },
+        {
+            "Phase": "Phase 5",
+            "Component": "Interactive Dashboard",
+            "Status": "Planned",
+            "Deliverable": "PowerBI/Tableau style cards, charts, filters",
+        },
+        {
+            "Phase": "Phase 6",
+            "Component": "Report & UI Assembly",
+            "Status": "Planned",
+            "Deliverable": "HTML report export, end-to-end integration",
+        },
+        {
+            "Phase": "Phase 7",
+            "Component": "Hardening & Docs",
+            "Status": "Planned",
+            "Deliverable": "Stress tests, Docker, deployment, final v1.0.0",
+        },
     ]
     st.table(specs_data)

@@ -3,7 +3,7 @@
 Provides formatting, color palettes, and memory estimation helpers.
 """
 
-from typing import Any, Dict
+from typing import Dict
 
 
 def get_color_palette() -> Dict[str, str]:

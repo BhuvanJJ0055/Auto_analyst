@@ -6,7 +6,6 @@ recommendations, and operational limitations.
 """
 
 from typing import Any, Dict, List, Optional
-import pandas as pd
 
 
 def generate_html_report(

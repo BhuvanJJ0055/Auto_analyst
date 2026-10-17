@@ -5,11 +5,9 @@ and multi-format variations (CSV, Excel, JSON) to test the analytical pipeline.
 """
 
 from datetime import datetime, timedelta
-import json
-import os
 from pathlib import Path
 import random
-from typing import Any, Dict, List
+from typing import Any, Dict
 import numpy as np
 import pandas as pd
 
@@ -69,12 +67,20 @@ def _generate_clean_record(order_num: int, order_date: datetime) -> Dict[str, An
 
     gender = random.choice(["Female", "Male", "Non-Binary"])
     age = int(np.random.randint(18, 68))
-    quantity = int(np.random.choice([1, 2, 3, 4, 5, 6, 8, 10], p=[0.40, 0.25, 0.15, 0.08, 0.05, 0.04, 0.02, 0.01]))
+    quantity = int(
+        np.random.choice(
+            [1, 2, 3, 4, 5, 6, 8, 10], p=[0.40, 0.25, 0.15, 0.08, 0.05, 0.04, 0.02, 0.01]
+        )
+    )
 
     price_jitter = float(np.random.uniform(0.92, 1.08))
     unit_price = round(base_price * price_jitter, 2)
 
-    discount_rate = float(np.random.choice([0.0, 0.05, 0.10, 0.15, 0.20, 0.25], p=[0.35, 0.25, 0.20, 0.10, 0.07, 0.03]))
+    discount_rate = float(
+        np.random.choice(
+            [0.0, 0.05, 0.10, 0.15, 0.20, 0.25], p=[0.35, 0.25, 0.20, 0.10, 0.07, 0.03]
+        )
+    )
     discount_amount = round(quantity * unit_price * discount_rate, 2)
     revenue = round((quantity * unit_price) - discount_amount, 2)
 
@@ -229,7 +235,9 @@ def make_timeseries_sales() -> pd.DataFrame:
 
         daily_volume = max(
             1,
-            int(np.random.poisson(lam=12 * weekend_boost * annual_cycle * trend * q4_holiday_spike)),
+            int(
+                np.random.poisson(lam=12 * weekend_boost * annual_cycle * trend * q4_holiday_spike)
+            ),
         )
 
         for _ in range(daily_volume):
