@@ -24,6 +24,12 @@ AutoAnalyst is a local, privacy-first automated data analyst built with Python a
 
 ---
 
+## 🖥️ Application Preview
+
+![AutoAnalyst Dark Theme Overview](docs/overview_dark_mode.png)
+
+---
+
 ## 🏗️ Architecture & Pipeline
 
 ```mermaid

@@ -24,12 +24,12 @@ st.markdown(
     .main-header {
         font-size: 2.25rem;
         font-weight: 700;
-        color: #1E293B;
+        color: #F0F6FC;
         margin-bottom: 0.25rem;
     }
     .sub-header {
         font-size: 1.05rem;
-        color: #64748B;
+        color: #8B949E;
         margin-bottom: 1.5rem;
     }
     .pipeline-container {
@@ -39,26 +39,45 @@ st.markdown(
         margin-bottom: 1.5rem;
     }
     .pipeline-step {
-        background: #F1F5F9;
-        color: #334155;
+        background: #21262D;
+        color: #C9D1D9;
         padding: 0.4rem 0.8rem;
         border-radius: 6px;
         font-size: 0.85rem;
         font-weight: 600;
-        border: 1px solid #CBD5E1;
+        border: 1px solid #30363D;
     }
     .pipeline-step.active {
         background: #2563EB;
         color: #FFFFFF;
-        border-color: #1D4ED8;
+        border-color: #3B82F6;
     }
     .card {
-        background: #FFFFFF;
-        border: 1px solid #E2E8F0;
+        background: #161B22;
+        border: 1px solid #30363D;
         border-radius: 8px;
         padding: 1.25rem;
         margin-bottom: 1rem;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    .card h4 {
+        color: #FFFFFF !important;
+        margin-top: 0;
+        margin-bottom: 0.5rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+    .card p {
+        color: #C9D1D9 !important;
+        font-size: 0.92rem;
+        line-height: 1.5;
+        margin-bottom: 0;
+    }
+    button[data-baseweb="tab"] {
+        color: #8B949E !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        color: #58A6FF !important;
     }
     </style>
     """,
