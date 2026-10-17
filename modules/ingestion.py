@@ -32,6 +32,9 @@ def get_excel_sheet_names(file_path_or_buffer: Any) -> List[str]:
         List of sheet names.
     """
     try:
+        if isinstance(file_path_or_buffer, bytes):
+            file_path_or_buffer = io.BytesIO(file_path_or_buffer)
+
         if isinstance(file_path_or_buffer, (str, Path)):
             wb = openpyxl.load_workbook(file_path_or_buffer, read_only=True)
             return wb.sheetnames
@@ -133,6 +136,10 @@ def load_file(
         resolved_name = filename or path.name
         with open(path, "rb") as f:
             file_bytes = f.read()
+    elif isinstance(file_path_or_buffer, bytes):
+        file_bytes = file_path_or_buffer
+        file_size = len(file_bytes)
+        resolved_name = filename or "dataset"
     else:
         # Buffer / UploadedFile
         if hasattr(file_path_or_buffer, "name"):
