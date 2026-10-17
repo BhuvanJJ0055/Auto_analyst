@@ -291,7 +291,9 @@ def generate_all_datasets(generate_large: bool = True) -> None:
 
     print("Generating sales.xlsx, sales.json, and sales.parquet (100 rows sample)...")
     sample_format_df = clean_df.head(100)
-    sample_format_df.to_excel(SAMPLE_DATA_DIR / "sales.xlsx", index=False, engine="openpyxl")
+    with pd.ExcelWriter(SAMPLE_DATA_DIR / "sales.xlsx", engine="openpyxl") as writer:
+        sample_format_df.to_excel(writer, sheet_name="Transactions", index=False)
+        sample_format_df.head(30).to_excel(writer, sheet_name="Regional_Summary", index=False)
     sample_format_df.to_json(SAMPLE_DATA_DIR / "sales.json", orient="records", indent=2)
     sample_format_df.to_parquet(SAMPLE_DATA_DIR / "sales.parquet", index=False, engine="pyarrow")
 

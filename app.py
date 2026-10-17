@@ -92,7 +92,7 @@ st.markdown(
     .grade-A { background: #0E4429; color: #3FB950; border: 1px solid #238636; }
     .grade-B { background: #0C2D6B; color: #58A6FF; border: 1px solid #1F6FEB; }
     .grade-C { background: #4D2D00; color: #D29922; border: 1px solid #9E6A03; }
-    .grade-D { background: #4D1B0C; color: #DB6D28; border: 1px solid #BD561D; }
+    .grade-D { background: #4D1B0C; color: #F0883E; border: 1px solid #BD561D; }
     .grade-F { background: #490202; color: #F85149; border: 1px solid #DA3633; }
     .metric-card {
         background: #161B22;
@@ -213,6 +213,7 @@ with st.sidebar:
 
     df_loaded: Optional[pd.DataFrame] = None
     ingestion_meta: Optional[Dict[str, Any]] = None
+    ingestion_error: Optional[str] = None
     sample_dir = Path(__file__).resolve().parent / "sample_data"
 
     if source_mode == "Upload File":
@@ -240,20 +241,38 @@ with st.sidebar:
                         raw_bytes, filename=filename, sheet_name=target_sheet
                     )
             except IngestionError as err:
+                ingestion_error = str(err)
                 st.error(f"⚠️ Ingestion Error: {err}")
     else:
         sample_files = sorted([f.name for f in sample_dir.glob("*.*") if f.name != "large.csv"])
+        default_idx = (
+            sample_files.index("clean_sales.csv") if "clean_sales.csv" in sample_files else 0
+        )
         selected_sample = st.selectbox(
             "Select Benchmark Dataset",
             sample_files,
-            index=sample_files.index("clean_sales.csv") if "clean_sales.csv" in sample_files else 0,
+            index=default_idx,
         )
         if selected_sample:
             sample_path = sample_dir / selected_sample
             with open(sample_path, "rb") as sf:
                 sample_bytes = sf.read()
-            with st.spinner(f"Loading {selected_sample}..."):
-                df_loaded, ingestion_meta = cached_load_file(sample_bytes, filename=selected_sample)
+            target_sheet = None
+            if selected_sample.lower().endswith((".xlsx", ".xls")):
+                try:
+                    sheets = get_excel_sheet_names(sample_bytes)
+                    if len(sheets) > 1:
+                        target_sheet = st.selectbox("Select Excel Sheet", sheets)
+                except Exception as exc:
+                    st.error(f"Error reading Excel sheets: {exc}")
+            try:
+                with st.spinner(f"Loading {selected_sample}..."):
+                    df_loaded, ingestion_meta = cached_load_file(
+                        sample_bytes, filename=selected_sample, sheet_name=target_sheet
+                    )
+            except IngestionError as err:
+                ingestion_error = str(err)
+                st.error(f"⚠️ Ingestion Error: {err}")
 
     st.divider()
     st.caption("AutoAnalyst executes locally without external API dependencies.")
@@ -445,6 +464,7 @@ if df_loaded is not None and ingestion_meta is not None:
                 unsafe_allow_html=True,
             )
 
+        st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
         with st.expander("ℹ️ Data Quality Score Formula & Weights Breakdown"):
             st.markdown("""
                 The **AutoAnalyst Data Quality Score (0–100)** is computed using four pillars:
@@ -605,6 +625,9 @@ if df_loaded is not None and ingestion_meta is not None:
             },
         ]
         st.table(specs_data)
+elif ingestion_error:
+    st.error(f"⚠️ **Unable to ingest dataset**: {ingestion_error}")
+    st.info("Please inspect the file format and ensure it is a valid, non-corrupt dataset.")
 else:
     st.info(
         "Please upload a dataset or select a benchmark sample in the sidebar to begin analysis."
