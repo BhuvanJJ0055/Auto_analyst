@@ -8,9 +8,9 @@ This document tracks phase-by-phase implementation status, test results, accepta
 
 | Phase | Description | Status | Tests Passing | Release Tag |
 |---|---|---|---|---|
-| **Phase 0** | **Setup & Benchmark Suite** | **Completed** | **7 / 7 (100%)** | `v0.0.0` (Pending Approval) |
-| Phase 1 | Ingestion & Profiling | Next | - | - |
-| Phase 2 | Cleaning Engine | Planned | - | - |
+| **Phase 0** | **Setup & Benchmark Suite** | **Completed** | **7 / 7 (100%)** | `v0.0.0` |
+| **Phase 1** | **Ingestion & Profiling** | **Completed** | **20 / 20 (100%)** | `v0.1.0` (Pending Approval) |
+| Phase 2 | Cleaning Engine | Next | - | - |
 | Phase 3 | EDA & Visualization | Planned | - | - |
 | Phase 4 | Insights Engine | Planned | - | - |
 | Phase 5 | Interactive Dashboard | Planned | - | - |
@@ -43,14 +43,55 @@ This document tracks phase-by-phase implementation status, test results, accepta
 - [x] `streamlit run app.py` opens without errors.
 - [x] All sample files are generated in `sample_data/`.
 - [x] `README.md` explains environment setup and execution steps.
-- [x] The repository is pushed to GitHub with `.gitignore`, `LICENSE`, and first tagged release pending approval.
-
-### Known Issues & Mitigations
-- None. All 7 unit tests pass with zero warnings or errors.
+- [x] Merged with `--no-ff` into `main` and tagged `v0.0.0`.
 
 ---
 
-## Next Phase: Phase 1 (Ingestion & Profiling)
-- Implement `modules/ingestion.py` (`load_file` supporting CSV, XLSX, JSON, Parquet with chardet encoding & delimiter auto-detection).
-- Implement `modules/profiling.py` (`profile_data` with dynamic semantic type inference, missingness, statistical summaries, and 0-100 quality score formula).
-- Connect upload widget, 20-row preview, profile tables, and quality gauge to the Streamlit UI.
+## Phase 1: Ingestion & Profiling
+
+### Tasks Completed
+- [x] Enhanced `scripts/make_sample_data.py` to produce benchmark `sales.parquet` alongside CSV, XLSX, and JSON.
+- [x] Implemented `modules/ingestion.py`:
+  - Format detection: CSV, TSV, Excel (`.xlsx`, `.xls`), JSON, and Apache Parquet.
+  - Automatic encoding detection via `chardet` (with fallback to `utf-8` / `latin-1`).
+  - Delimiter sniffer supporting commas, tabs, semicolons, and pipes.
+  - Excel sheet listing (`get_excel_sheet_names`) and selective sheet ingestion.
+  - File size threshold guard (200MB default limit) and empty file validation.
+  - Immutable DataFrame ingestion (guarantees deep copy isolation).
+- [x] Implemented `modules/profiling.py`:
+  - Rule-based semantic type inference (`numeric`, `categorical`, `datetime`, `boolean`, `id_like`, `constant`, `text`).
+  - Text and currency string detection (e.g., `$1,200.50`, `-$45.00`).
+  - Mixed date format detection and negative value inspection.
+  - Transparent 0–100 Data Quality Score formula:
+    - Completeness (30% weight): cell-level missing rate penalty.
+    - Uniqueness (25% weight): duplicate row penalty.
+    - Validity (25% weight): date parsing errors and currency string penalties.
+    - Consistency (20% weight): constant columns, all-null columns, and outlier density.
+  - Categorical and numerical descriptive statistics (percentiles, IQR, skewness, top frequencies).
+- [x] Connected Ingestion & Profiling to Streamlit application (`app.py`):
+  - Sidebar file uploader (CSV, TSV, XLSX, XLS, JSON, PARQUET) and benchmark dataset selector.
+  - High-impact Data Quality Score card with grade pill (`Grade A` to `Grade F`) and metric breakdown.
+  - 20-row interactive data preview with CSV download button.
+  - Semantic column distribution chips and interactive inspection table with detailed drill-down statistics.
+- [x] Automated unit test suite expanded to 20 tests (`tests/test_ingestion.py`, `tests/test_profiling.py`) with 100% pass rate.
+- [x] Validated benchmark quality score disparity:
+  - `clean_sales.csv`: Score **100.0 / 100 (Grade A)**.
+  - `messy_sales.csv`: Score **65.3 / 100 (Grade D)**.
+- [x] Captured UI profiling screenshot in `docs/profiling_overview.png`.
+
+### Acceptance Criteria Checklist
+- [x] Multi-format ingestion engine successfully parses CSV, XLSX, JSON, and Parquet.
+- [x] `messy_sales.csv` scores significantly lower (65.3) than `clean_sales.csv` (100.0).
+- [x] Semantic types correctly inferred for every column across all benchmark datasets.
+- [x] 100% test pass rate across 20 test cases.
+- [x] Code strictly adheres to PEP 8 (`flake8`) and `black` line formatting (100 char limit).
+
+---
+
+## Next Phase: Phase 2 (Cleaning Engine)
+- Implement `modules/cleaning.py` (`clean_data` pure function returning cleaned `pd.DataFrame` and structured audit log).
+- Missing value imputation (numeric mean/median, categorical mode/constant).
+- Deduplication with logged duplicate indices.
+- Currency string normalization and mixed date parser.
+- Outlier detection and treatment (IQR clamping, z-score capping, removal).
+- Interactive cleaning recommendations and before/after comparisons in the UI.
