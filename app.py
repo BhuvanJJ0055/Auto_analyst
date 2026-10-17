@@ -88,8 +88,8 @@ st.markdown(
 st.markdown('<div class="main-header">📊 AutoAnalyst</div>', unsafe_allow_html=True)
 st.markdown(
     '<div class="sub-header">'
-    "Autonomous end-to-end data analysis engine: ingestion, profiling, automated cleaning, "
-    "EDA, interactive dashboards, plain-English insights, and publication reports."
+    "Upload a dataset and get automatic cleaning, EDA, an interactive dashboard, "
+    "and a plain-English report."
     "</div>",
     unsafe_allow_html=True,
 )
@@ -147,7 +147,7 @@ with tab_overview:
         st.markdown(
             """
             <div class="card">
-                <h4>🤖 Zero-Hardcoding EDA</h4>
+                <h4>🔍 Zero-Hardcoding EDA</h4>
                 <p>Fully dynamic semantic type inference adapts to any tabular dataset
                 (CSV, Excel, JSON, Parquet) without predetermined schemas.</p>
             </div>
