@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional, Tuple
 import pandas as pd
 import streamlit as st
 
+from modules.cleaning import clean_data
 from modules.ingestion import IngestionError, get_excel_sheet_names, load_file
 from modules.profiling import profile_data
 
@@ -168,8 +169,8 @@ st.markdown(
     """
     <div class="pipeline-container">
         <span class="pipeline-step completed">✓ 1. Ingestion</span>
-        <span class="pipeline-step active">⚡ 2. Profiling</span>
-        <span class="pipeline-step">3. Cleaning</span>
+        <span class="pipeline-step completed">✓ 2. Profiling</span>
+        <span class="pipeline-step active">⚡ 3. Cleaning</span>
         <span class="pipeline-step">4. EDA</span>
         <span class="pipeline-step">5. Visualization</span>
         <span class="pipeline-step">6. Insights</span>
@@ -197,10 +198,18 @@ def cached_profile_data(df: pd.DataFrame) -> Dict[str, Any]:
     return profile_data(df)
 
 
+@st.cache_data(show_spinner=False)
+def cached_clean_data(
+    df: pd.DataFrame, config: Optional[Dict[str, Any]] = None
+) -> Tuple[pd.DataFrame, Any]:
+    """Cached data cleaning wrapper."""
+    return clean_data(df, config=config)
+
+
 # Sidebar Configuration
 with st.sidebar:
     st.header("⚙️ Configuration")
-    st.markdown("**Version:** `v0.1.0 (Phase 1: Ingestion & Profiling)`")
+    st.markdown("**Version:** `v0.2.0-dev (Phase 2: Cleaning Engine)`")
     st.divider()
 
     st.subheader("1. Ingest Dataset")
@@ -384,11 +393,12 @@ if df_loaded is not None and ingestion_meta is not None:
         )
 
     # Tabs Section
-    tab_overview, tab_preview, tab_profiling, tab_specs = st.tabs(
+    tab_overview, tab_preview, tab_profiling, tab_cleaning, tab_specs = st.tabs(
         [
             "🚀 Dataset Overview",
             "📂 Data Preview",
             "🔍 Column Profiling",
+            "🧹 Cleaning Engine",
             "📋 Technical Architecture",
         ]
     )
@@ -572,6 +582,256 @@ if df_loaded is not None and ingestion_meta is not None:
             if col_info.get("details"):
                 st.caption(f"Detected Attributes: {col_info['details']}")
 
+    with tab_cleaning:
+        st.subheader("🧹 Automated Data Cleaning Engine")
+        st.markdown(
+            "Configure and execute intelligent, non-destructive cleaning transformations. "
+            "The engine preserves raw data immutability and generates a complete audit trail."
+        )
+
+        with st.expander("🛠️ Cleaning Configuration & Rule Overrides", expanded=False):
+            st.markdown("##### 1. Toggle Cleaning Transformations")
+            cfg_col1, cfg_col2, cfg_col3 = st.columns(3)
+            with cfg_col1:
+                cfg_dedup = st.checkbox("Deduplication", value=True, help="Remove duplicate rows")
+                cfg_drop_null = st.checkbox(
+                    "Drop 100% Empty Columns",
+                    value=True,
+                    help="Drop all-null structural defect columns",
+                )
+                cfg_drop_const = st.checkbox(
+                    "Drop Constant Columns", value=False, help="Drop single-value columns"
+                )
+            with cfg_col2:
+                cfg_currency = st.checkbox(
+                    "Normalize Currency", value=True, help="Convert currency strings to float64"
+                )
+                cfg_datetime = st.checkbox(
+                    "Standardize Dates", value=True, help="Parse mixed date formats into datetime"
+                )
+                cfg_future = st.checkbox(
+                    "Handle Future Dates", value=True, help="Cap or flag unrealistic future dates"
+                )
+                cfg_text = st.checkbox(
+                    "Standardize Text",
+                    value=True,
+                    help="Trim spaces, title-case categoricals, merge region & gender variants",
+                )
+            with cfg_col3:
+                cfg_negatives = st.checkbox(
+                    "Correct Negatives", value=True, help="Invert negative ages & quantities"
+                )
+                cfg_outliers = st.checkbox(
+                    "Treat Outliers",
+                    value=True,
+                    help="Neutralize numerical outliers using statistical boundaries",
+                )
+                cfg_impute = st.checkbox(
+                    "Impute Missing Values", value=True, help="Fill nulls (median/mode)"
+                )
+
+            st.markdown("##### 2. Algorithmic Method Overrides")
+            m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+            with m_col1:
+                outlier_method = st.selectbox(
+                    "Outlier Detection Method", ["iqr", "zscore"], index=0
+                )
+            with m_col2:
+                outlier_action = st.selectbox(
+                    "Outlier Treatment Action", ["clip", "remove", "nullify"], index=0
+                )
+            with m_col3:
+                num_strategy = st.selectbox(
+                    "Numeric Imputation Strategy", ["median", "mean", "zero"], index=0
+                )
+            with m_col4:
+                future_action = st.selectbox(
+                    "Future Date Action", ["cap", "nullify", "flag"], index=0
+                )
+
+            st.button("🔄 Re-run Cleaning Engine", help="Apply chosen rules and recalculate")
+
+        cleaning_config = {
+            "deduplicate": cfg_dedup,
+            "drop_all_null": cfg_drop_null,
+            "drop_constant": cfg_drop_const,
+            "clean_currency": cfg_currency,
+            "clean_datetime": cfg_datetime,
+            "handle_future_dates": cfg_future,
+            "future_date_action": future_action,
+            "standardize_text": cfg_text,
+            "correct_negatives": cfg_negatives,
+            "handle_outliers": cfg_outliers,
+            "outlier_method": outlier_method,
+            "outlier_factor": 1.5,
+            "outlier_action": outlier_action,
+            "impute_missing": cfg_impute,
+            "numeric_impute_strategy": num_strategy,
+            "categorical_impute_strategy": "mode",
+        }
+
+        # Run cleaning
+        cleaned_df, audit_log = cached_clean_data(df_loaded, config=cleaning_config)
+        cleaned_profile = cached_profile_data(cleaned_df)
+        cleaned_quality = cleaned_profile["quality_score"]
+
+        # Before vs After Impact Metric Cards
+        st.markdown("#### Before vs. After Impact Comparison")
+        comp1, comp2, comp3, comp4, comp5 = st.columns(5)
+
+        with comp1:
+            score_diff = round(cleaned_quality["score"] - quality["score"], 1)
+            diff_color = "#3FB950" if score_diff >= 0 else "#F85149"
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-label">Quality Score</div>
+                    <div class="metric-value">{quality['score']} ➔ {cleaned_quality['score']}</div>
+                    <div class="metric-status" style="color: {diff_color}; font-weight: 600;">
+                        Grade {quality['grade']} ➔ Grade {cleaned_quality['grade']}
+                        ({score_diff:+} pts)
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        with comp2:
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-label">Total Rows</div>
+                    <div class="metric-value">{len(df_loaded):,} ➔ {len(cleaned_df):,}</div>
+                    <div class="metric-status status-good">
+                        {len(df_loaded) - len(cleaned_df)} duplicate rows dropped
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        with comp3:
+            orig_nulls = int(df_loaded.isna().sum().sum())
+            new_nulls = int(cleaned_df.isna().sum().sum())
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-label">Missing Cells</div>
+                    <div class="metric-value">{orig_nulls:,} ➔ {new_nulls:,}</div>
+                    <div class="metric-status status-good">
+                        {orig_nulls - new_nulls} cells resolved
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        with comp4:
+            reg_orig = df_loaded["region"].nunique() if "region" in df_loaded.columns else 0
+            reg_clean = cleaned_df["region"].nunique() if "region" in cleaned_df.columns else 0
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-label">Region Variants</div>
+                    <div class="metric-value">{reg_orig} ➔ {reg_clean}</div>
+                    <div class="metric-status status-good">
+                        Merged to 4 canonical regions
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        with comp5:
+            gen_orig = df_loaded["gender"].nunique() if "gender" in df_loaded.columns else 0
+            gen_clean = cleaned_df["gender"].nunique() if "gender" in cleaned_df.columns else 0
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-label">Gender Variants</div>
+                    <div class="metric-value">{gen_orig} ➔ {gen_clean}</div>
+                    <div class="metric-status status-good">
+                        Merged to 2 binary genders
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        st.divider()
+
+        # Cleaned Dataset Preview & Downloads
+        st.subheader("Cleaned Dataset Preview & Exports")
+        preview_rows = st.slider(
+            "Rows to display in preview",
+            min_value=5,
+            max_value=100,
+            value=20,
+            step=5,
+            key="clean_slider",
+        )
+        st.dataframe(cleaned_df.head(preview_rows), use_container_width=True)
+
+        dataset_filename = ingestion_meta.get("filename", "dataset.csv")
+        clean_filename = (
+            f"cleaned_{dataset_filename}"
+            if not dataset_filename.startswith("cleaned_")
+            else dataset_filename
+        )
+        if not clean_filename.endswith(".csv"):
+            clean_filename += ".csv"
+
+        dl_col1, dl_col2, dl_col3 = st.columns(3)
+        with dl_col1:
+            csv_clean_bytes = cleaned_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="📥 Download Cleaned Dataset (CSV)",
+                data=csv_clean_bytes,
+                file_name=clean_filename,
+                mime="text/csv",
+                use_container_width=True,
+            )
+
+        # Transformation Audit Log
+        st.divider()
+        st.subheader(f"Transformation Audit Trail ({len(audit_log)} Operations Logged)")
+        if audit_log:
+            log_records = []
+            for item in audit_log:
+                log_records.append(
+                    {
+                        "Step": item.get("step"),
+                        "Target Column": item.get("column"),
+                        "Method": item.get("method"),
+                        "Rows Affected": item.get("rows_affected"),
+                        "Action Performed": item.get("action"),
+                        "Details": str(item.get("details")),
+                    }
+                )
+            log_df = pd.DataFrame(log_records)
+            st.dataframe(log_df, use_container_width=True)
+
+            with dl_col2:
+                log_csv_bytes = log_df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label="📜 Download Audit Log (CSV)",
+                    data=log_csv_bytes,
+                    file_name="audit_log.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+            with dl_col3:
+                log_json_bytes = log_df.to_json(orient="records", indent=2).encode("utf-8")
+                st.download_button(
+                    label="🧾 Download Audit Log (JSON)",
+                    data=log_json_bytes,
+                    file_name="audit_log.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
+        else:
+            st.info("No cleaning transformations were necessary; dataset is already clean.")
+
     with tab_specs:
         st.subheader("Component Pipeline Specification")
         specs_data = [
@@ -590,7 +850,7 @@ if df_loaded is not None and ingestion_meta is not None:
             {
                 "Phase": "Phase 2",
                 "Component": "Cleaning Engine",
-                "Status": "Next",
+                "Status": "Completed",
                 "Deliverable": "Rule-based cleaning, outlier handling, audit trail",
             },
             {
