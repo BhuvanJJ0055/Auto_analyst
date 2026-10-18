@@ -117,9 +117,13 @@ def handle_structural_defects(
                         "step": "drop_all_null_column",
                         "column": col,
                         "method": "drop_empty_column",
-                        "rows_affected": len(df),
-                        "action": f"Dropped 100% empty column '{col}'",
-                        "details": {"non_null_count": 0, "total_rows": len(df)},
+                        "rows_affected": 1,
+                        "action": f"Dropped 1 column '{col}' (100% empty)",
+                        "details": {
+                            "columns_dropped": 1,
+                            "non_null_count": 0,
+                            "total_rows": len(df),
+                        },
                     }
                 )
         elif unique_count == 1:
@@ -131,9 +135,13 @@ def handle_structural_defects(
                         "step": "drop_constant_column",
                         "column": col,
                         "method": "drop_single_value_column",
-                        "rows_affected": len(df),
-                        "action": f"Dropped constant column '{col}'",
+                        "rows_affected": 1,
+                        "action": (
+                            f"Dropped 1 column '{col}' "
+                            f"(constant: {str(series.dropna().iloc[0])[:20]})"
+                        ),
                         "details": {
+                            "columns_dropped": 1,
                             "constant_value": str(series.dropna().iloc[0]),
                             "unique_count": 1,
                         },
@@ -147,8 +155,9 @@ def handle_structural_defects(
                         "column": col,
                         "method": "retain_business_constant",
                         "rows_affected": 0,
-                        "action": f"Flagged constant column '{col}' (retained)",
+                        "action": f"Flagged constant column '{col}' (retained, 0 rows changed)",
                         "details": {
+                            "columns_dropped": 0,
                             "constant_value": str(series.dropna().iloc[0]),
                             "unique_count": 1,
                         },
@@ -198,6 +207,8 @@ def clean_currency_and_numeric_strings(
             if success_count > 0 and (
                 columns or (success_count / len(non_null) > 0.6)
             ):
+                changed_mask = series.notna() & series.apply(lambda v: isinstance(v, str))
+                changed_count = int(changed_mask.sum())
                 cleaned_df[col] = parsed.astype("float64")
                 logs.append(
                     {
@@ -205,9 +216,12 @@ def clean_currency_and_numeric_strings(
                         "step": "clean_currency_strings",
                         "column": col,
                         "method": "regex_currency_parse",
-                        "rows_affected": success_count,
-                        "action": f"Normalized currency strings in '{col}' to float64",
+                        "rows_affected": changed_count,
+                        "action": (
+                            f"Normalized {changed_count} currency strings in '{col}' to float64"
+                        ),
                         "details": {
+                            "cells_changed": changed_count,
                             "parsed_values": success_count,
                             "original_dtype": str(series.dtype),
                             "new_dtype": "float64",
@@ -262,15 +276,22 @@ def clean_datetime_columns(
                 if valid_count > 0:
                     cleaned_df[col] = parsed_dates
                     failed_count = int(parsed_dates.isna().sum()) - int(series.isna().sum())
+                    changed_mask = series.notna() & series.apply(
+                        lambda v: not pd.api.types.is_datetime64_any_dtype(type(v))
+                    )
+                    changed_count = int(changed_mask.sum())
                     logs.append(
                         {
                             "timestamp": datetime.now().isoformat(),
                             "step": "clean_datetime",
                             "column": col,
                             "method": "mixed_format_inference",
-                            "rows_affected": valid_count,
-                            "action": f"Standardized mixed date formats in '{col}' to datetime",
+                            "rows_affected": changed_count,
+                            "action": (
+                                f"Standardized {changed_count} date entries in '{col}' to datetime"
+                            ),
                             "details": {
+                                "cells_changed": changed_count,
                                 "parsed_count": valid_count,
                                 "failed_parse_count": max(0, failed_count),
                                 "unique_dates_count": int(parsed_dates.dropna().nunique()),
@@ -449,6 +470,11 @@ def standardize_text(
         else:
             cleaned_series = cleaned_series.str.title()
 
+        # Count cells that actually changed before overwriting
+        orig_values = series.dropna().astype(str)
+        changed_mask = orig_values != cleaned_series
+        cells_changed = int(changed_mask.sum())
+
         cleaned_df[col] = cleaned_df[col].copy()
         cleaned_df.loc[cleaned_series.index, col] = cleaned_series
 
@@ -460,12 +486,16 @@ def standardize_text(
                 "step": "standardize_text",
                 "column": col,
                 "method": "title_case_and_synonyms",
-                "rows_affected": len(cleaned_series),
-                "action": f"Standardized text casing and variants in '{col}'",
+                "rows_affected": cells_changed,
+                "action": (
+                    f"Standardized '{col}': {orig_unique} variants "
+                    f"-> {new_unique} ({cells_changed} cells changed)"
+                ),
                 "details": {
+                    "cells_changed": cells_changed,
                     "original_unique_values": orig_unique,
                     "standardized_unique_values": new_unique,
-                    "unique_values_sample": cleaned_df[col].dropna().unique().tolist()[:10],
+                    "canonical_values": cleaned_df[col].dropna().unique().tolist()[:10],
                 },
             }
         )
