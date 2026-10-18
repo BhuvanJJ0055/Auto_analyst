@@ -5,6 +5,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- Automated, non-destructive data cleaning engine in `modules/cleaning.py` with full provenance audit logging.
+- Deduplication with logged duplicate indices (drops 140 duplicate rows on benchmark data).
+- Automatic dropping of 100% all-null structural defect columns (`cancellation_notes`).
+- String-encoded currency parsing (`₹`, `$`, `€`, comma separators, parenthesized negatives) to native `float64`.
+- Mixed datetime parser standardizing varied date formats into `datetime64[ns]`.
+- Text standardization engine trimming whitespace, compressing internal spaces, and canonicalizing categories:
+  - Merges region variants (east/East/EAST/spaces) down to exactly 4 canonical regions (`East`, `North`, `South`, `West`).
+  - Merges gender variants (M/Male/male/F/Female/female) down to exactly 2 binary genders (`Female`, `Male`).
+- Negative value anomaly correction for strictly positive domains (e.g., negative ages).
+- Numerical outlier treatment with IQR boundary clipping (`1.5 * IQR`) neutralizing extreme revenue spikes.
+- Missing value imputation using median for skewed numeric columns and mode for categoricals.
+- Dedicated "🧹 Cleaning Engine" Streamlit UI tab with interactive configuration toggles, before/after impact comparison cards, 20-row preview, CSV export, and step-by-step audit log table.
+- Comprehensive unit and acceptance test suite in `tests/test_cleaning.py` expanding test coverage to 32 tests (100% pass rate).
 
 ## [0.1.0] - 2026-10-18
 ### Added
