@@ -631,20 +631,27 @@ if df_loaded is not None and ingestion_meta is not None:
                 )
 
             st.markdown("##### 2. Algorithmic Method Overrides")
-            m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+            m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
             with m_col1:
                 outlier_method = st.selectbox(
                     "Outlier Detection Method", ["iqr", "zscore"], index=0
                 )
             with m_col2:
+                outlier_factor_choice = st.selectbox(
+                    "Outlier Threshold Factor",
+                    ["3.0 (Extreme Outliers)", "1.5 (Standard Fences)"],
+                    index=0,
+                )
+                outlier_factor = 3.0 if "3.0" in outlier_factor_choice else 1.5
+            with m_col3:
                 outlier_action = st.selectbox(
                     "Outlier Treatment Action", ["clip", "remove", "nullify"], index=0
                 )
-            with m_col3:
+            with m_col4:
                 num_strategy = st.selectbox(
                     "Numeric Imputation Strategy", ["median", "mean", "zero"], index=0
                 )
-            with m_col4:
+            with m_col5:
                 future_action = st.selectbox(
                     "Future Date Action", ["cap", "nullify", "flag"], index=0
                 )
@@ -663,7 +670,7 @@ if df_loaded is not None and ingestion_meta is not None:
             "correct_negatives": cfg_negatives,
             "handle_outliers": cfg_outliers,
             "outlier_method": outlier_method,
-            "outlier_factor": 1.5,
+            "outlier_factor": outlier_factor,
             "outlier_action": outlier_action,
             "impute_missing": cfg_impute,
             "numeric_impute_strategy": num_strategy,

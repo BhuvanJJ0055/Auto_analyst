@@ -525,17 +525,23 @@ def handle_outliers(
     df: pd.DataFrame,
     columns: Optional[List[str]] = None,
     method: str = "iqr",
-    factor: float = 1.5,
+    factor: float = 3.0,
     action: str = "clip",
+    group_col: Optional[str] = None,
 ) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
     """Detect and treat numerical outliers using IQR or Z-score thresholds.
+
+    Applies Tukey's extreme outlier boundary (default factor=3.0) and supports
+    context-aware boundary evaluation (per product/category) to prevent flattening
+    multimodal business metrics like catalog prices or diverse revenues.
 
     Args:
         df: Input DataFrame.
         columns: Optional list of numeric columns. If None, targets all numeric columns.
         method: Detection strategy ('iqr' or 'zscore').
-        factor: Threshold multiplier (default 1.5 for IQR, 3.0 for Z-score).
+        factor: Threshold multiplier (default 3.0 for extreme IQR fences, 3.0 for Z-score).
         action: Treatment action ('clip' to cap at boundaries, 'remove', or 'nullify').
+        group_col: Optional explicit column name to group by for context-aware boundaries.
 
     Returns:
         Tuple of (cleaned DataFrame copy, list of audit log entries).
@@ -547,6 +553,15 @@ def handle_outliers(
         c for c in cleaned_df.columns if pd.api.types.is_numeric_dtype(cleaned_df[c])
     ]
 
+    candidate_product_col = None
+    candidate_category_col = None
+    for c in cleaned_df.columns:
+        c_lower = c.lower()
+        if c_lower in ["product", "product_name", "item", "sku"]:
+            candidate_product_col = c
+        elif c_lower in ["category", "dept", "department", "segment"]:
+            candidate_category_col = c
+
     for col in target_cols:
         if col not in cleaned_df.columns:
             continue
@@ -554,76 +569,174 @@ def handle_outliers(
         if len(series) < 10 or series.nunique() <= 2:
             continue
 
-        if method == "iqr":
-            q1 = float(series.quantile(0.25))
-            q3 = float(series.quantile(0.75))
-            iqr = q3 - q1
-            if iqr <= 0:
-                continue
-            lower_bound = q1 - (factor * iqr)
-            upper_bound = q3 + (factor * iqr)
-        elif method == "zscore":
-            mean = float(series.mean())
-            std = float(series.std())
-            if std <= 0:
-                continue
-            lower_bound = mean - (factor * std)
-            upper_bound = mean + (factor * std)
-        else:
-            raise ValueError(f"Unknown outlier detection method '{method}'")
+        active_group = group_col
+        if not active_group:
+            col_lower = col.lower()
+            if ("price" in col_lower or "cost" in col_lower) and candidate_product_col:
+                active_group = candidate_product_col
+            elif ("price" in col_lower or "cost" in col_lower) and candidate_category_col:
+                active_group = candidate_category_col
+            elif col_lower in ["revenue", "profit", "sales"] and candidate_category_col:
+                active_group = candidate_category_col
 
-        outlier_mask = (cleaned_df[col] < lower_bound) | (cleaned_df[col] > upper_bound)
-        outlier_count = int(outlier_mask.sum())
+        if active_group and active_group in cleaned_df.columns:
+            total_outliers = 0
+            lower_bounds = []
+            upper_bounds = []
 
-        if outlier_count > 0:
-            if action == "clip":
-                cleaned_df[col] = cleaned_df[col].clip(lower=lower_bound, upper=upper_bound)
+            for g_val, g_df in cleaned_df.groupby(active_group):
+                g_series = g_df[col].dropna()
+                if len(g_series) < 5 or g_series.nunique() <= 1:
+                    continue
+
+                if method == "iqr":
+                    q1 = float(g_series.quantile(0.25))
+                    q3 = float(g_series.quantile(0.75))
+                    iqr = q3 - q1
+                    if iqr <= 0:
+                        continue
+                    low = q1 - (factor * iqr)
+                    high = q3 + (factor * iqr)
+                elif method == "zscore":
+                    mean = float(g_series.mean())
+                    std = float(g_series.std())
+                    if std <= 0:
+                        continue
+                    low = mean - (factor * std)
+                    high = mean + (factor * std)
+                else:
+                    raise ValueError(f"Unknown outlier detection method '{method}'")
+
+                lower_bounds.append(low)
+                upper_bounds.append(high)
+
+                g_mask = (cleaned_df[active_group] == g_val) & (
+                    (cleaned_df[col] < low) | (cleaned_df[col] > high)
+                )
+                g_count = int(g_mask.sum())
+                if g_count > 0:
+                    total_outliers += g_count
+                    if action == "clip":
+                        cleaned_df.loc[g_mask, col] = cleaned_df.loc[g_mask, col].clip(
+                            lower=low, upper=high
+                        )
+                    elif action == "nullify":
+                        cleaned_df.loc[g_mask, col] = np.nan
+                    elif action == "remove":
+                        cleaned_df = cleaned_df[~g_mask].copy().reset_index(drop=True)
+
+            if total_outliers > 0:
+                min_low = round(min(lower_bounds), 4) if lower_bounds else 0.0
+                max_high = round(max(upper_bounds), 4) if upper_bounds else 0.0
                 logs.append(
                     {
                         "timestamp": datetime.now().isoformat(),
                         "step": "handle_outliers",
                         "column": col,
-                        "method": f"{method}_clipping",
-                        "rows_affected": outlier_count,
+                        "method": f"{method}_grouped_by_{active_group}",
+                        "rows_affected": total_outliers,
                         "action": (
-                            f"Clipped {outlier_count} outliers in '{col}' using {method.upper()}"
+                            f"Capped {total_outliers} outliers in '{col}' "
+                            f"grouped by '{active_group}' [limits: {min_low} to {max_high}]"
                         ),
                         "details": {
                             "method": method,
                             "factor": factor,
-                            "lower_bound": round(lower_bound, 4),
-                            "upper_bound": round(upper_bound, 4),
-                            "outliers_treated": outlier_count,
+                            "group_by": active_group,
+                            "lower_limit": min_low,
+                            "upper_limit": max_high,
+                            "outliers_treated": total_outliers,
                             "action": action,
                         },
                     }
                 )
-            elif action == "nullify":
-                cleaned_df.loc[outlier_mask, col] = np.nan
-                logs.append(
-                    {
-                        "timestamp": datetime.now().isoformat(),
-                        "step": "handle_outliers",
-                        "column": col,
-                        "method": f"{method}_nullify",
-                        "rows_affected": outlier_count,
-                        "action": f"Set {outlier_count} outliers in '{col}' to NaN",
-                        "details": {"outliers_nullified": outlier_count},
-                    }
-                )
-            elif action == "remove":
-                cleaned_df = cleaned_df[~outlier_mask].copy().reset_index(drop=True)
-                logs.append(
-                    {
-                        "timestamp": datetime.now().isoformat(),
-                        "step": "handle_outliers",
-                        "column": col,
-                        "method": f"{method}_row_removal",
-                        "rows_affected": outlier_count,
-                        "action": f"Dropped {outlier_count} rows with outliers in '{col}'",
-                        "details": {"rows_removed": outlier_count},
-                    }
-                )
+        else:
+            if method == "iqr":
+                q1 = float(series.quantile(0.25))
+                q3 = float(series.quantile(0.75))
+                iqr = q3 - q1
+                if iqr <= 0:
+                    continue
+                lower_bound = q1 - (factor * iqr)
+                upper_bound = q3 + (factor * iqr)
+            elif method == "zscore":
+                mean = float(series.mean())
+                std = float(series.std())
+                if std <= 0:
+                    continue
+                lower_bound = mean - (factor * std)
+                upper_bound = mean + (factor * std)
+            else:
+                raise ValueError(f"Unknown outlier detection method '{method}'")
+
+            outlier_mask = (cleaned_df[col] < lower_bound) | (cleaned_df[col] > upper_bound)
+            outlier_count = int(outlier_mask.sum())
+
+            if outlier_count > 0:
+                if action == "clip":
+                    cleaned_df[col] = cleaned_df[col].clip(lower=lower_bound, upper=upper_bound)
+                    logs.append(
+                        {
+                            "timestamp": datetime.now().isoformat(),
+                            "step": "handle_outliers",
+                            "column": col,
+                            "method": f"{method}_clipping",
+                            "rows_affected": outlier_count,
+                            "action": (
+                                f"Capped {outlier_count} outliers in '{col}' "
+                                f"using {method.upper()} "
+                                f"[limits: {round(lower_bound, 4)} to {round(upper_bound, 4)}]"
+                            ),
+                            "details": {
+                                "method": method,
+                                "factor": factor,
+                                "lower_limit": round(lower_bound, 4),
+                                "upper_limit": round(upper_bound, 4),
+                                "outliers_treated": outlier_count,
+                                "action": action,
+                            },
+                        }
+                    )
+                elif action == "nullify":
+                    cleaned_df.loc[outlier_mask, col] = np.nan
+                    logs.append(
+                        {
+                            "timestamp": datetime.now().isoformat(),
+                            "step": "handle_outliers",
+                            "column": col,
+                            "method": f"{method}_nullify",
+                            "rows_affected": outlier_count,
+                            "action": f"Set {outlier_count} outliers in '{col}' to NaN",
+                            "details": {
+                                "method": method,
+                                "factor": factor,
+                                "lower_limit": round(lower_bound, 4),
+                                "upper_limit": round(upper_bound, 4),
+                                "outliers_treated": outlier_count,
+                                "action": action,
+                            },
+                        }
+                    )
+                elif action == "remove":
+                    cleaned_df = cleaned_df[~outlier_mask].copy().reset_index(drop=True)
+                    logs.append(
+                        {
+                            "timestamp": datetime.now().isoformat(),
+                            "step": "handle_outliers",
+                            "column": col,
+                            "method": f"{method}_row_removal",
+                            "rows_affected": outlier_count,
+                            "action": f"Dropped {outlier_count} rows with outliers in '{col}'",
+                            "details": {
+                                "method": method,
+                                "factor": factor,
+                                "lower_limit": round(lower_bound, 4),
+                                "upper_limit": round(upper_bound, 4),
+                                "outliers_treated": outlier_count,
+                                "action": action,
+                            },
+                        }
+                    )
 
     return cleaned_df, logs
 
@@ -740,7 +853,7 @@ def clean_data(
             - 'correct_negatives': bool (default True)
             - 'handle_outliers': bool (default True)
             - 'outlier_method': 'iqr' or 'zscore' (default 'iqr')
-            - 'outlier_factor': float (default 1.5)
+            - 'outlier_factor': float (default 3.0)
             - 'outlier_action': 'clip', 'remove', 'nullify' (default 'clip')
             - 'impute_missing': bool (default True)
             - 'numeric_impute_strategy': 'median' or 'mean' (default 'median')
@@ -800,7 +913,7 @@ def clean_data(
         cleaned_df, outlier_logs = handle_outliers(
             cleaned_df,
             method=cfg.get("outlier_method", "iqr"),
-            factor=cfg.get("outlier_factor", 1.5),
+            factor=cfg.get("outlier_factor", 3.0),
             action=cfg.get("outlier_action", "clip"),
         )
         audit_trail.extend(outlier_logs)

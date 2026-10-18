@@ -305,10 +305,59 @@ def test_order_date_diversity_and_multi_year_span() -> None:
     span_days = (max_date - min_date).days
     assert (
         span_days >= 730
-    ), f"Expected date span >= 730 days (2 years), but got {span_days} days ({min_date} to {max_date})"
+    ), (
+        f"Expected date span >= 730 days (2 years), but got {span_days} days "
+        f"({min_date} to {max_date})"
+    )
 
     # 3. First 10 rows must have multiple distinct dates
     first_10_unique = cleaned_df["order_date"].head(10).nunique()
     assert (
         first_10_unique > 1
     ), f"First 10 rows collapsed to single date: {cleaned_df['order_date'].head(10).tolist()}"
+
+
+def test_outlier_capping_under_five_percent_and_product_price_preservation() -> None:
+    """Acceptance test: Outlier treatment does not squash legitimate catalog prices.
+
+    Asserts:
+    1. Capped values are under 5% of total rows for ANY numeric column.
+    2. Distinct products (e.g. Laptop Pro and Smartphone 5G) preserve their authentic prices.
+    3. The audit log explicitly records rows affected and boundary limits.
+    """
+    messy_path = SAMPLE_DATA_DIR / "messy_sales.csv"
+    df_messy, _ = load_file(messy_path)
+    cleaned_df, logs = clean_data(df_messy)
+
+    total_rows = len(cleaned_df)
+    outlier_logs = [log for log in logs if log["step"] == "handle_outliers"]
+
+    # 1. Capped values are under 5% of any column
+    for o_log in outlier_logs:
+        affected = o_log["rows_affected"]
+        col = o_log["column"]
+        pct = (affected / total_rows) * 100
+        assert (
+            affected < 0.05 * total_rows
+        ), f"Column '{col}' had {affected} rows capped ({pct:.2f}%), exceeding 5% threshold"
+
+    # 2. Distinct products keep their authentic prices
+    if "product" in cleaned_df.columns and "unit_price" in cleaned_df.columns:
+        laptop_prices = cleaned_df[cleaned_df["product"] == "Laptop Pro"]["unit_price"]
+        phone_prices = cleaned_df[cleaned_df["product"] == "Smartphone 5G"]["unit_price"]
+
+        assert len(laptop_prices) > 0 and len(phone_prices) > 0
+        assert laptop_prices.mean() > 50000.0, "Laptop Pro price incorrectly squashed"
+        assert (
+            28000.0 < phone_prices.mean() < 36000.0
+        ), f"Smartphone 5G price outside expected range: {phone_prices.mean()}"
+        assert abs(laptop_prices.mean() - phone_prices.mean()) > 10000.0, (
+            "Prices collapsed to identical ceiling"
+        )
+
+    # 3. Log shows capped counts and limits
+    for o_log in outlier_logs:
+        details = o_log["details"]
+        assert "lower_limit" in details or "lower_bound" in details
+        assert "upper_limit" in details or "upper_bound" in details
+        assert o_log["rows_affected"] >= 0
