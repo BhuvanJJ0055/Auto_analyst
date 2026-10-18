@@ -209,28 +209,42 @@ def test_clean_data_end_to_end_quality_score_improvement() -> None:
     after_score = after_profile["quality_score"]["score"]
 
     # Verify score improves to Grade A (>= 90)
-    assert after_score >= 95.0, f"Expected cleaned score >= 95.0, got {after_score}"
+    assert after_score >= 90.0, f"Expected cleaned score >= 90.0, got {after_score}"
     assert after_profile["quality_score"]["grade"] == "A"
     assert after_profile["duplicate_rows"] == 0
-    assert after_profile["total_missing_cells"] == 0
+    # Flagged future dates default to NaT, while all missing tabular cells are imputed
+    assert after_profile["total_missing_cells"] == 35
     assert len(logs) > 0
 
 
-def test_future_dates_capping() -> None:
-    """Verify future dates beyond max_date are capped or nullified."""
+def test_future_dates_capping_and_nullify() -> None:
+    """Verify future dates beyond max_date default to NaT and can be capped via config."""
     df_sample = pd.DataFrame(
         {
             "order_date": pd.to_datetime(["2023-01-01", "2023-06-01", "2028-12-31"]),
         }
     )
     max_d = pd.Timestamp("2024-01-01")
-    cleaned_df, logs = handle_future_dates(
+
+    # 1. Default action: nullify (flag and set to NaT)
+    cleaned_df_null, logs_null = handle_future_dates(
+        df_sample, columns=["order_date"], max_date=max_d
+    )
+    assert pd.isna(cleaned_df_null["order_date"].iloc[2])
+    assert len(logs_null) == 1
+    assert logs_null[0]["rows_affected"] == 1
+    assert logs_null[0]["method"] == "flag_and_nullify"
+    assert logs_null[0]["details"]["future_dates_flagged"] == 1
+
+    # 2. Config override: cap at maximum valid date
+    cleaned_df_cap, logs_cap = handle_future_dates(
         df_sample, columns=["order_date"], max_date=max_d, action="cap"
     )
-    assert cleaned_df["order_date"].max() <= max_d
-    assert len(logs) == 1
-    assert logs[0]["rows_affected"] == 1
-    assert logs[0]["method"] == "cap_to_max_valid_date"
+    assert cleaned_df_cap["order_date"].max() <= max_d
+    assert len(logs_cap) == 1
+    assert logs_cap[0]["rows_affected"] == 1
+    assert logs_cap[0]["method"] == "flag_and_cap"
+    assert logs_cap[0]["details"]["future_dates_flagged"] == 1
 
 
 def test_negative_age_fixed_before_median_imputation() -> None:

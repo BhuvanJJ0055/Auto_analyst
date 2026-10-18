@@ -320,7 +320,7 @@ def handle_future_dates(
     df: pd.DataFrame,
     columns: Optional[List[str]] = None,
     max_date: Optional[Union[pd.Timestamp, datetime]] = None,
-    action: str = "cap",
+    action: str = "nullify",
 ) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
     """Detect and handle dates that occur beyond allowable historical bounds.
 
@@ -328,7 +328,8 @@ def handle_future_dates(
         df: Input DataFrame.
         columns: Optional list of datetime columns.
         max_date: Maximum allowable timestamp. Defaults to pd.Timestamp.now().
-        action: 'cap' (cap at max valid historical date), 'nullify' (set to NaT), or 'flag'.
+        action: 'nullify' (default: flag and set to NaT), 'cap' (cap at max valid historical date),
+                or 'flag' (flag and retain).
 
     Returns:
         Tuple of (cleaned DataFrame copy, list of audit log entries).
@@ -365,16 +366,18 @@ def handle_future_dates(
                         "timestamp": datetime.now().isoformat(),
                         "step": "handle_future_dates",
                         "column": col,
-                        "method": "cap_to_max_valid_date",
+                        "method": "flag_and_cap",
                         "rows_affected": future_count,
                         "action": (
-                            f"Capped {future_count} future dates in '{col}' to "
+                            f"Flagged and capped {future_count} future dates in '{col}' to "
                             f"{cap_target.strftime('%Y-%m-%d')}"
                         ),
                         "details": {
+                            "future_dates_flagged": future_count,
                             "future_dates_count": future_count,
-                            "threshold_date": cap_target.isoformat(),
-                            "action": action,
+                            "cap_target": cap_target.strftime("%Y-%m-%d"),
+                            "action": "cap",
+                            "threshold_date": threshold_date.strftime("%Y-%m-%d"),
                         },
                     }
                 )
@@ -385,10 +388,15 @@ def handle_future_dates(
                         "timestamp": datetime.now().isoformat(),
                         "step": "handle_future_dates",
                         "column": col,
-                        "method": "nullify_future_dates",
+                        "method": "flag_and_nullify",
                         "rows_affected": future_count,
-                        "action": f"Set {future_count} future dates in '{col}' to NaT",
-                        "details": {"future_dates_count": future_count},
+                        "action": f"Flagged {future_count} future dates in '{col}' and set to NaT",
+                        "details": {
+                            "future_dates_flagged": future_count,
+                            "future_dates_count": future_count,
+                            "action": "nullify",
+                            "threshold_date": threshold_date.strftime("%Y-%m-%d"),
+                        },
                     }
                 )
             elif action == "flag":
@@ -400,7 +408,12 @@ def handle_future_dates(
                         "method": "flag_future_dates",
                         "rows_affected": future_count,
                         "action": f"Flagged {future_count} future dates in '{col}' (retained)",
-                        "details": {"future_dates_count": future_count},
+                        "details": {
+                            "future_dates_flagged": future_count,
+                            "future_dates_count": future_count,
+                            "action": "flag",
+                            "threshold_date": threshold_date.strftime("%Y-%m-%d"),
+                        },
                     }
                 )
 
@@ -818,8 +831,11 @@ def impute_missing_values(
             cleaned_df[col] = series.fillna(imputed_val)
 
         elif pd.api.types.is_datetime64_any_dtype(series):
-            cleaned_df[col] = series.ffill().bfill()
-            eff_strategy = "ffill_bfill"
+            eff_strategy = custom_rules.get(col)
+            if eff_strategy:
+                cleaned_df[col] = series.ffill().bfill()
+            else:
+                continue
 
         else:
             eff_strategy = strategy or categorical_strategy
@@ -878,7 +894,7 @@ def clean_data(
             - 'clean_currency': bool (default True)
             - 'clean_datetime': bool (default True)
             - 'handle_future_dates': bool (default True)
-            - 'future_date_action': 'cap', 'nullify', 'flag' (default 'cap')
+            - 'future_date_action': 'nullify', 'cap', 'flag' (default 'nullify')
             - 'standardize_text': bool (default True)
             - 'correct_negatives': bool (default True)
             - 'handle_outliers': bool (default True)
@@ -924,7 +940,7 @@ def clean_data(
     if cfg.get("handle_future_dates", True):
         cleaned_df, future_logs = handle_future_dates(
             cleaned_df,
-            action=cfg.get("future_date_action", "cap"),
+            action=cfg.get("future_date_action", "nullify"),
         )
         audit_trail.extend(future_logs)
 
