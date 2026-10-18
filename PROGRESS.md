@@ -10,8 +10,8 @@ This document tracks phase-by-phase implementation status, test results, accepta
 |---|---|---|---|---|
 | **Phase 0** | **Setup & Benchmark Suite** | **Completed** | **7 / 7 (100%)** | `v0.0.0` |
 | **Phase 1** | **Ingestion & Profiling** | **Completed** | **21 / 21 (100%)** | `v0.1.0` |
-| **Phase 2** | **Cleaning Engine** | **In Progress** | - | - |
-| Phase 3 | EDA & Visualization | Planned | - | - |
+| **Phase 2** | **Cleaning Engine** | **Completed** | **32 / 32 (100%)** | `v0.2.0` (Pending Approval) |
+| Phase 3 | EDA & Visualization | Next | - | - |
 | Phase 4 | Insights Engine | Planned | - | - |
 | Phase 5 | Interactive Dashboard | Planned | - | - |
 | Phase 6 | Report & UI Assembly | Planned | - | - |
@@ -20,6 +20,7 @@ This document tracks phase-by-phase implementation status, test results, accepta
 ---
 
 ## Phase 0: Setup & Scaffolding
+
 
 ### Tasks Completed
 - [x] Initialized Git repository and set default branch to `main`.
@@ -88,10 +89,42 @@ This document tracks phase-by-phase implementation status, test results, accepta
 
 ---
 
-## Next Phase: Phase 2 (Cleaning Engine)
-- Implement `modules/cleaning.py` (`clean_data` pure function returning cleaned `pd.DataFrame` and structured audit log).
-- Missing value imputation (numeric mean/median, categorical mode/constant).
-- Deduplication with logged duplicate indices.
-- Currency string normalization and mixed date parser.
-- Outlier detection and treatment (IQR clamping, z-score capping, removal).
-- Interactive cleaning recommendations and before/after comparisons in the UI.
+## Phase 2: Cleaning Engine
+
+### Tasks Completed
+- [x] Implemented `modules/cleaning.py` with pure, non-destructive transformation functions:
+  - `clean_data`: Orchestrator returning deep-copied cleaned `pd.DataFrame` and structured audit trail.
+  - `deduplicate_data`: Identifies and logs duplicate rows (drops 140 benchmark duplicates).
+  - `handle_structural_defects`: Automatically drops 100% all-null columns (`cancellation_notes`) and flags constant columns.
+  - `clean_currency_and_numeric_strings`: Normalizes currency symbols (`₹`, `$`, `€`, commas, parentheses) to native `float64`.
+  - `clean_datetime_columns`: Normalizes mixed date strings into `datetime64[ns]`.
+  - `standardize_text`: Whitespace stripping, internal space compression, title-casing, and categorical canonicalization.
+    - Merges region variants (east/East/EAST/whitespace) down to exactly 4 canonical regions (`East`, `North`, `South`, `West`).
+    - Merges gender variants (M/Male/male/F/Female/female) down to exactly 2 binary genders (`Female`, `Male`).
+  - `correct_negative_anomalies`: Inverts negative values in positive domain features (e.g. negative ages).
+  - `handle_outliers`: IQR boundary clamping (`1.5 * IQR`) neutralizing extreme revenue outliers without row loss.
+  - `impute_missing_values`: Median imputation for skewed numerics (`customer_rating`, `age`, `discount`) and mode for categoricals.
+- [x] Connected Cleaning Engine to Streamlit application (`app.py`):
+  - Added dedicated "🧹 Cleaning Engine" tab with interactive rule toggles.
+  - Before vs. After impact cards: Quality Score (65.3 ➔ 95.0, Grade D ➔ Grade A), total rows, missing cells, and region/gender variant counts.
+  - Cleaned data preview with configurable row slider and CSV download button.
+  - Complete transformation audit log viewer detailing each step, affected column, and operation metadata.
+- [x] Expanded automated test suite to 32 tests (`tests/test_cleaning.py`) with 100% pass rate.
+- [x] Added acceptance test explicitly verifying exact counts: 4 regions and 2 genders after standardization.
+- [x] Zero lint warnings across PEP 8 and `flake8`.
+
+### Acceptance Criteria Checklist
+- [x] `clean_data` guarantees original DataFrame immutability.
+- [x] Text standardization merges region variants down to exactly 4 regions (`East`, `North`, `South`, `West`).
+- [x] Text standardization merges gender variants down to exactly 2 values (`Female`, `Male`).
+- [x] Quality score improves from 65.3 (Grade D) to 95.0 (Grade A) on benchmark messy data.
+- [x] 100% test pass rate across 32 unit and acceptance tests.
+
+---
+
+## Next Phase: Phase 3 (EDA & Automated Visualization)
+- Univariate distribution analysis (histograms, KDE, boxplots, category bars).
+- Bivariate correlation analysis (Pearson/Spearman correlation heatmap, scatter plots).
+- Time-series trend and seasonality decomposition.
+- Interactive Plotly visualization components and dynamic chart exports.
+
