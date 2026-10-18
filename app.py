@@ -259,8 +259,8 @@ def format_audit_details(step: str, details: Any) -> str:
         return f"{changed} cells changed ({orig_u} variants -> {new_u} canonical categories)"
 
     if step == "correct_negatives":
-        neg = details.get("negatives_inverted", 0)
-        return f"{neg} negative domain values converted to positive (abs)"
+        neg = details.get("negatives_flagged", details.get("negatives_inverted", 0))
+        return f"{neg} negative domain values set to missing (to be filled by median)"
 
     if step == "handle_outliers":
         low = details.get("lower_limit", "")

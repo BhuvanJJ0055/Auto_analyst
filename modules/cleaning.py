@@ -548,16 +548,19 @@ def correct_negative_anomalies(
         neg_mask = series < 0
         neg_count = int(neg_mask.sum())
         if neg_count > 0:
-            cleaned_df[col] = series.abs()
+            cleaned_df.loc[neg_mask, col] = np.nan
             logs.append(
                 {
                     "timestamp": datetime.now().isoformat(),
                     "step": "correct_negatives",
                     "column": col,
-                    "method": "absolute_value",
+                    "method": "set_to_missing",
                     "rows_affected": neg_count,
-                    "action": f"Converted {neg_count} negative entries in '{col}' to positive",
-                    "details": {"negatives_inverted": neg_count},
+                    "action": f"Set {neg_count} negative entries in '{col}' to missing",
+                    "details": {
+                        "negatives_flagged": neg_count,
+                        "action": "set_to_missing",
+                    },
                 }
             )
 

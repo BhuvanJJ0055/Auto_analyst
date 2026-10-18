@@ -149,7 +149,7 @@ def test_clean_datetime_columns() -> None:
 
 
 def test_correct_negative_anomalies() -> None:
-    """Verify negative values in positive domains (e.g. age) are inverted."""
+    """Verify negative values in positive domains (e.g. age) are set to missing."""
     df_sample = pd.DataFrame(
         {
             "age": [25, -18, 30, -42],
@@ -157,11 +157,16 @@ def test_correct_negative_anomalies() -> None:
         }
     )
     cleaned_df, logs = correct_negative_anomalies(df_sample)
-    assert (cleaned_df["age"] >= 0).all()
-    assert (cleaned_df["quantity"] >= 0).all()
-    assert cleaned_df["age"].tolist() == [25, 18, 30, 42]
-    assert cleaned_df["quantity"].tolist() == [2, 5, 10, 1]
+    assert cleaned_df["age"].isna().sum() == 2
+    assert cleaned_df["quantity"].isna().sum() == 1
+    assert (cleaned_df["age"].dropna() > 0).all()
+    assert (cleaned_df["quantity"].dropna() > 0).all()
     assert len(logs) == 2
+    assert logs[0]["step"] == "correct_negatives"
+    assert logs[0]["method"] == "set_to_missing"
+    assert logs[0]["action"] == "Set 2 negative entries in 'age' to missing"
+    assert logs[0]["rows_affected"] == 2
+    assert logs[0]["details"]["negatives_flagged"] == 2
 
 
 def test_handle_outliers_clipping() -> None:
@@ -248,14 +253,14 @@ def test_future_dates_capping_and_nullify() -> None:
 
 
 def test_negative_age_fixed_before_median_imputation() -> None:
-    """Verify negative ages are corrected before median is computed so imputation is accurate."""
-    # If negatives were not fixed: values [-20, 20, 40, np.nan], median of (-20, 20, 40) is 20
-    # After negatives fixed: values [20, 20, 40, np.nan], median of (20, 20, 40) is 20
-    # Stronger case: [-50, -40, 10, np.nan]
-    # Unfixed median: -40. Fixed median: (10, 40, 50) -> 40.
+    """Verify negative ages are set to missing so median is computed on legitimate positive ages."""
+    # Sample has valid ages 30, 40, one negative age -10, and one NaN
+    # Without fixing negatives to NaN, median of (30, 40, -10) is 30.0 (distorted)
+    # When -10 is set to NaN, valid positive ages are (30, 40), median is 35.0
+    # Both index 2 (formerly -10) and index 3 (formerly NaN) get imputed with 35.0
     df_sample = pd.DataFrame(
         {
-            "age": [-50, -40, 10, np.nan],
+            "age": [30.0, 40.0, -10.0, np.nan],
         }
     )
     cleaned_df, _ = clean_data(
@@ -272,10 +277,9 @@ def test_negative_age_fixed_before_median_imputation() -> None:
             "numeric_impute_strategy": "median",
         },
     )
-    # Since negatives were fixed to [50, 40, 10], median is 40.0
-    imputed_value = cleaned_df["age"].iloc[3]
-    assert imputed_value == 40.0, f"Expected median 40.0, got {imputed_value}"
-    assert (cleaned_df["age"] >= 0).all()
+    assert cleaned_df["age"].iloc[2] == 35.0
+    assert cleaned_df["age"].iloc[3] == 35.0
+    assert (cleaned_df["age"] > 0).all()
 
 
 def test_audit_log_fields_reconciliation() -> None:
