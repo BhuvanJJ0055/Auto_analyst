@@ -276,3 +276,39 @@ def test_audit_log_fields_reconciliation() -> None:
             set(log.keys())
         ), f"Log entry missing required keys: {log}"
         assert isinstance(log["rows_affected"], int)
+
+
+def test_order_date_diversity_and_multi_year_span() -> None:
+    """Acceptance test: cleaned order_date does not collapse to a single date.
+
+    Asserts:
+    1. Cleaned order_date has more than 500 unique dates on messy_sales.csv.
+    2. Min and max order_date span at least 2 full years (>= 730 days).
+    3. First 10 visible rows exhibit varied dates rather than a constant fallback.
+    """
+    messy_path = SAMPLE_DATA_DIR / "messy_sales.csv"
+    df_messy, _ = load_file(messy_path)
+    cleaned_df, logs = clean_data(df_messy)
+
+    assert "order_date" in cleaned_df.columns
+    assert pd.api.types.is_datetime64_any_dtype(cleaned_df["order_date"])
+
+    # 1. More than 500 unique dates
+    unique_dates = cleaned_df["order_date"].nunique()
+    assert (
+        unique_dates > 500
+    ), f"Expected > 500 unique dates, but found {unique_dates}"
+
+    # 2. Min and max span at least 2 years (730 days)
+    min_date = cleaned_df["order_date"].min()
+    max_date = cleaned_df["order_date"].max()
+    span_days = (max_date - min_date).days
+    assert (
+        span_days >= 730
+    ), f"Expected date span >= 730 days (2 years), but got {span_days} days ({min_date} to {max_date})"
+
+    # 3. First 10 rows must have multiple distinct dates
+    first_10_unique = cleaned_df["order_date"].head(10).nunique()
+    assert (
+        first_10_unique > 1
+    ), f"First 10 rows collapsed to single date: {cleaned_df['order_date'].head(10).tolist()}"

@@ -108,9 +108,9 @@ def _generate_clean_record(order_num: int, order_date: datetime) -> Dict[str, An
 
 
 def make_clean_sales(num_rows: int = 1000) -> pd.DataFrame:
-    """Generate 1,000 clean sales transactions."""
-    start_date = datetime(2023, 1, 1)
-    end_date = datetime(2023, 12, 31)
+    """Generate clean sales transactions across a multi-year timeline."""
+    start_date = datetime(2022, 1, 1)
+    end_date = datetime(2024, 12, 31)
     days_range = (end_date - start_date).days
 
     records = []
@@ -119,7 +119,6 @@ def make_clean_sales(num_rows: int = 1000) -> pd.DataFrame:
         records.append(_generate_clean_record(i, order_date))
 
     df = pd.DataFrame(records)
-    df.sort_values("order_date", inplace=True)
     df.reset_index(drop=True, inplace=True)
     return df
 

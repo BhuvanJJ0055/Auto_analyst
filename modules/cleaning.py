@@ -261,6 +261,7 @@ def clean_datetime_columns(
                 valid_count = int(parsed_dates.dropna().count())
                 if valid_count > 0:
                     cleaned_df[col] = parsed_dates
+                    failed_count = int(parsed_dates.isna().sum()) - int(series.isna().sum())
                     logs.append(
                         {
                             "timestamp": datetime.now().isoformat(),
@@ -271,8 +272,10 @@ def clean_datetime_columns(
                             "action": f"Standardized mixed date formats in '{col}' to datetime",
                             "details": {
                                 "parsed_count": valid_count,
-                                "failed_parse_count": int(parsed_dates.isna().sum())
-                                - int(series.isna().sum()),
+                                "failed_parse_count": max(0, failed_count),
+                                "unique_dates_count": int(parsed_dates.dropna().nunique()),
+                                "min_date": str(parsed_dates.dropna().min()),
+                                "max_date": str(parsed_dates.dropna().max()),
                             },
                         }
                     )
@@ -304,7 +307,7 @@ def handle_future_dates(
         df: Input DataFrame.
         columns: Optional list of datetime columns.
         max_date: Maximum allowable timestamp. Defaults to pd.Timestamp.now().
-        action: 'cap' (cap at max_date), 'nullify' (set to NaT), or 'flag'.
+        action: 'cap' (cap at max valid historical date), 'nullify' (set to NaT), or 'flag'.
 
     Returns:
         Tuple of (cleaned DataFrame copy, list of audit log entries).
@@ -329,7 +332,13 @@ def handle_future_dates(
 
         if future_count > 0:
             if action == "cap":
-                cleaned_df.loc[future_mask, col] = threshold_date
+                valid_series = series[~future_mask].dropna()
+                cap_target = (
+                    pd.Timestamp(max_date)
+                    if max_date
+                    else (valid_series.max() if len(valid_series) > 0 else threshold_date)
+                )
+                cleaned_df.loc[future_mask, col] = cap_target
                 logs.append(
                     {
                         "timestamp": datetime.now().isoformat(),
@@ -339,11 +348,11 @@ def handle_future_dates(
                         "rows_affected": future_count,
                         "action": (
                             f"Capped {future_count} future dates in '{col}' to "
-                            f"{threshold_date.strftime('%Y-%m-%d')}"
+                            f"{cap_target.strftime('%Y-%m-%d')}"
                         ),
                         "details": {
                             "future_dates_count": future_count,
-                            "threshold_date": threshold_date.isoformat(),
+                            "threshold_date": cap_target.isoformat(),
                             "action": action,
                         },
                     }
@@ -666,8 +675,8 @@ def impute_missing_values(
             cleaned_df[col] = series.fillna(imputed_val)
 
         elif pd.api.types.is_datetime64_any_dtype(series):
-            cleaned_df[col] = series.bfill().ffill()
-            eff_strategy = "bfill_ffill"
+            cleaned_df[col] = series.ffill().bfill()
+            eff_strategy = "ffill_bfill"
 
         else:
             eff_strategy = strategy or categorical_strategy
