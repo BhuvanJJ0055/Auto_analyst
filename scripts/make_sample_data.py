@@ -289,10 +289,13 @@ def generate_all_datasets(generate_large: bool = True) -> None:
     tiny_df = make_tiny_sales(50)
     tiny_df.to_csv(SAMPLE_DATA_DIR / "tiny.csv", index=False)
 
-    print("Generating sales.xlsx and sales.json (100 rows sample)...")
+    print("Generating sales.xlsx, sales.json, and sales.parquet (100 rows sample)...")
     sample_format_df = clean_df.head(100)
-    sample_format_df.to_excel(SAMPLE_DATA_DIR / "sales.xlsx", index=False, engine="openpyxl")
+    with pd.ExcelWriter(SAMPLE_DATA_DIR / "sales.xlsx", engine="openpyxl") as writer:
+        sample_format_df.to_excel(writer, sheet_name="Transactions", index=False)
+        sample_format_df.head(30).to_excel(writer, sheet_name="Regional_Summary", index=False)
     sample_format_df.to_json(SAMPLE_DATA_DIR / "sales.json", orient="records", indent=2)
+    sample_format_df.to_parquet(SAMPLE_DATA_DIR / "sales.parquet", index=False, engine="pyarrow")
 
     if generate_large:
         print("Generating large.csv (200,000 rows, git-ignored)...")

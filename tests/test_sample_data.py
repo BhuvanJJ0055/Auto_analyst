@@ -109,3 +109,8 @@ def test_tiny_and_multiformat_sales() -> None:
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     assert len(data) == 100
+
+    parquet_path = SAMPLE_DATA_DIR / "sales.parquet"
+    assert parquet_path.exists()
+    parquet_df = pd.read_parquet(parquet_path, engine="pyarrow")
+    assert len(parquet_df) == 100
