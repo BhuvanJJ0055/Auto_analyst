@@ -1,24 +1,808 @@
 """Data Cleaning Engine Module for AutoAnalyst.
 
-Provides automated cleaning strategies: column standardization, duplicate
-removal, missing value imputation, type conversion, outlier handling,
-and maintains an audit log of all transformations.
+Provides automated, configurable, and non-destructive data cleaning pipelines:
+- Deduplication with logged duplicate indices
+- Structural defect handling (dropping all-null columns, constant column handling)
+- String-encoded currency and numeric normalization
+- Mixed datetime parsing and standardization
+- Future date anomaly detection and treatment
+- Text standardization (whitespace trimming, case normalization, category canonicalization)
+- Negative anomaly correction for positive domain variables
+- Outlier detection and treatment (IQR clamping, z-score capping)
+- Missing value imputation (mean/median for numeric, mode/constant for categorical)
+- Comprehensive structured audit log recording all transformations.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import datetime
+import re
+from typing import Any, Dict, List, Optional, Tuple, Union
+import numpy as np
 import pandas as pd
+
+from modules.profiling import infer_column_semantic_type
+
+
+GENDER_SYNONYMS: Dict[str, str] = {
+    "m": "Male",
+    "male": "Male",
+    "man": "Male",
+    "boy": "Male",
+    "f": "Female",
+    "female": "Female",
+    "woman": "Female",
+    "girl": "Female",
+}
+
+
+def _clean_currency_value(val: Any) -> Optional[float]:
+    """Parse string-encoded numeric or currency value into float."""
+    if val is None or pd.isna(val):
+        return None
+    s = str(val).strip()
+    cleaned = re.sub(r"[₹$€£¥,\s]", "", s)
+    if cleaned.startswith("(") and cleaned.endswith(")"):
+        cleaned = "-" + cleaned[1:-1]
+    try:
+        return float(cleaned)
+    except (ValueError, TypeError):
+        return None
+
+
+def deduplicate_data(
+    df: pd.DataFrame,
+    subset: Optional[List[str]] = None,
+    keep: str = "first",
+) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """Identify and remove duplicate rows from DataFrame.
+
+    Args:
+        df: Input DataFrame.
+        subset: Optional list of columns to consider for identifying duplicates.
+        keep: Which duplicate occurrence to keep ('first', 'last', False).
+
+    Returns:
+        Tuple of (deduplicated DataFrame copy, audit log entry).
+    """
+    dup_mask = df.duplicated(subset=subset, keep=keep)
+    duplicate_count = int(dup_mask.sum())
+    dup_indices = df.index[dup_mask].tolist()
+
+    cleaned_df = df[~dup_mask].copy().reset_index(drop=True)
+
+    log_entry: Dict[str, Any] = {
+        "timestamp": datetime.now().isoformat(),
+        "step": "deduplication",
+        "column": ", ".join(subset) if subset else "all_columns",
+        "method": "exact_row_match",
+        "rows_affected": duplicate_count,
+        "action": f"Removed {duplicate_count} duplicate rows",
+        "details": {
+            "rows_removed": duplicate_count,
+            "rows_remaining": len(cleaned_df),
+            "duplicate_indices_sample": dup_indices[:10],
+        },
+    }
+    return cleaned_df, log_entry
+
+
+def handle_structural_defects(
+    df: pd.DataFrame,
+    drop_all_null: bool = True,
+    drop_constant: bool = False,
+) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
+    """Identify and handle all-null and constant columns.
+
+    Args:
+        df: Input DataFrame.
+        drop_all_null: Whether to drop columns that have 100% missing values.
+        drop_constant: Whether to drop columns that have only 1 unique non-null value.
+
+    Returns:
+        Tuple of (cleaned DataFrame copy, list of audit log entries).
+    """
+    cleaned_df = df.copy()
+    logs: List[Dict[str, Any]] = []
+
+    for col in list(cleaned_df.columns):
+        series = cleaned_df[col]
+        non_null_count = int(series.dropna().count())
+        unique_count = int(series.dropna().nunique())
+
+        if non_null_count == 0:
+            if drop_all_null:
+                cleaned_df.drop(columns=[col], inplace=True)
+                logs.append(
+                    {
+                        "timestamp": datetime.now().isoformat(),
+                        "step": "drop_all_null_column",
+                        "column": col,
+                        "method": "drop_empty_column",
+                        "rows_affected": len(df),
+                        "action": f"Dropped 100% empty column '{col}'",
+                        "details": {"non_null_count": 0, "total_rows": len(df)},
+                    }
+                )
+        elif unique_count == 1:
+            if drop_constant:
+                cleaned_df.drop(columns=[col], inplace=True)
+                logs.append(
+                    {
+                        "timestamp": datetime.now().isoformat(),
+                        "step": "drop_constant_column",
+                        "column": col,
+                        "method": "drop_single_value_column",
+                        "rows_affected": len(df),
+                        "action": f"Dropped constant column '{col}'",
+                        "details": {
+                            "constant_value": str(series.dropna().iloc[0]),
+                            "unique_count": 1,
+                        },
+                    }
+                )
+            else:
+                logs.append(
+                    {
+                        "timestamp": datetime.now().isoformat(),
+                        "step": "flag_constant_column",
+                        "column": col,
+                        "method": "retain_business_constant",
+                        "rows_affected": 0,
+                        "action": f"Flagged constant column '{col}' (retained)",
+                        "details": {
+                            "constant_value": str(series.dropna().iloc[0]),
+                            "unique_count": 1,
+                        },
+                    }
+                )
+
+    return cleaned_df, logs
+
+
+def clean_currency_and_numeric_strings(
+    df: pd.DataFrame,
+    columns: Optional[List[str]] = None,
+) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
+    """Convert string-encoded currency and numbers into native float64.
+
+    Args:
+        df: Input DataFrame.
+        columns: Optional explicit list of columns to convert. If None,
+                 auto-detects columns with string currency patterns.
+
+    Returns:
+        Tuple of (cleaned DataFrame copy, list of audit log entries).
+    """
+    cleaned_df = df.copy()
+    logs: List[Dict[str, Any]] = []
+
+    target_cols = columns or list(cleaned_df.columns)
+
+    for col in target_cols:
+        if col not in cleaned_df.columns:
+            continue
+        series = cleaned_df[col]
+        if pd.api.types.is_numeric_dtype(series):
+            continue
+
+        non_null = series.dropna()
+        if len(non_null) == 0:
+            continue
+
+        sample_vals = non_null.astype(str).head(50)
+        has_currency_symbols = sample_vals.str.contains(r"[₹$€£¥]", regex=True).any()
+        has_thousand_commas = sample_vals.str.contains(r"\d{1,3},\d{3}", regex=True).any()
+
+        if columns or has_currency_symbols or has_thousand_commas:
+            parsed = series.map(_clean_currency_value)
+            success_count = int(parsed.dropna().count())
+            if success_count > 0 and (
+                columns or (success_count / len(non_null) > 0.6)
+            ):
+                cleaned_df[col] = parsed.astype("float64")
+                logs.append(
+                    {
+                        "timestamp": datetime.now().isoformat(),
+                        "step": "clean_currency_strings",
+                        "column": col,
+                        "method": "regex_currency_parse",
+                        "rows_affected": success_count,
+                        "action": f"Normalized currency strings in '{col}' to float64",
+                        "details": {
+                            "parsed_values": success_count,
+                            "original_dtype": str(series.dtype),
+                            "new_dtype": "float64",
+                        },
+                    }
+                )
+
+    return cleaned_df, logs
+
+
+def clean_datetime_columns(
+    df: pd.DataFrame,
+    columns: Optional[List[str]] = None,
+) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
+    """Parse string-encoded or mixed date columns into datetime64[ns].
+
+    Args:
+        df: Input DataFrame.
+        columns: Optional explicit list of columns. If None, uses semantic inference.
+
+    Returns:
+        Tuple of (cleaned DataFrame copy, list of audit log entries).
+    """
+    cleaned_df = df.copy()
+    logs: List[Dict[str, Any]] = []
+
+    target_cols = columns or list(cleaned_df.columns)
+
+    for col in target_cols:
+        if col not in cleaned_df.columns:
+            continue
+        series = cleaned_df[col]
+        if pd.api.types.is_datetime64_any_dtype(series):
+            continue
+
+        non_null = series.dropna()
+        if len(non_null) == 0:
+            continue
+
+        is_date_col = False
+        if columns and col in columns:
+            is_date_col = True
+        else:
+            sem_type, details = infer_column_semantic_type(series)
+            if sem_type == "datetime" or details.get("is_string_encoded_date"):
+                is_date_col = True
+
+        if is_date_col:
+            try:
+                parsed_dates = pd.to_datetime(series, format="mixed", errors="coerce")
+                valid_count = int(parsed_dates.dropna().count())
+                if valid_count > 0:
+                    cleaned_df[col] = parsed_dates
+                    logs.append(
+                        {
+                            "timestamp": datetime.now().isoformat(),
+                            "step": "clean_datetime",
+                            "column": col,
+                            "method": "mixed_format_inference",
+                            "rows_affected": valid_count,
+                            "action": f"Standardized mixed date formats in '{col}' to datetime",
+                            "details": {
+                                "parsed_count": valid_count,
+                                "failed_parse_count": int(parsed_dates.isna().sum())
+                                - int(series.isna().sum()),
+                            },
+                        }
+                    )
+            except Exception as e:
+                logs.append(
+                    {
+                        "timestamp": datetime.now().isoformat(),
+                        "step": "clean_datetime_failed",
+                        "column": col,
+                        "method": "error_fallback",
+                        "rows_affected": 0,
+                        "action": f"Could not parse dates in '{col}': {str(e)}",
+                        "details": {"error": str(e)},
+                    }
+                )
+
+    return cleaned_df, logs
+
+
+def handle_future_dates(
+    df: pd.DataFrame,
+    columns: Optional[List[str]] = None,
+    max_date: Optional[Union[pd.Timestamp, datetime]] = None,
+    action: str = "cap",
+) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
+    """Detect and handle dates that occur beyond allowable historical bounds.
+
+    Args:
+        df: Input DataFrame.
+        columns: Optional list of datetime columns.
+        max_date: Maximum allowable timestamp. Defaults to pd.Timestamp.now().
+        action: 'cap' (cap at max_date), 'nullify' (set to NaT), or 'flag'.
+
+    Returns:
+        Tuple of (cleaned DataFrame copy, list of audit log entries).
+    """
+    cleaned_df = df.copy()
+    logs: List[Dict[str, Any]] = []
+
+    target_cols = columns or [
+        c for c in cleaned_df.columns if pd.api.types.is_datetime64_any_dtype(cleaned_df[c])
+    ]
+    threshold_date = pd.Timestamp(max_date) if max_date else pd.Timestamp(datetime.now())
+
+    for col in target_cols:
+        if col not in cleaned_df.columns:
+            continue
+        series = cleaned_df[col]
+        if not pd.api.types.is_datetime64_any_dtype(series):
+            continue
+
+        future_mask = series > threshold_date
+        future_count = int(future_mask.sum())
+
+        if future_count > 0:
+            if action == "cap":
+                cleaned_df.loc[future_mask, col] = threshold_date
+                logs.append(
+                    {
+                        "timestamp": datetime.now().isoformat(),
+                        "step": "handle_future_dates",
+                        "column": col,
+                        "method": "cap_to_max_valid_date",
+                        "rows_affected": future_count,
+                        "action": (
+                            f"Capped {future_count} future dates in '{col}' to "
+                            f"{threshold_date.strftime('%Y-%m-%d')}"
+                        ),
+                        "details": {
+                            "future_dates_count": future_count,
+                            "threshold_date": threshold_date.isoformat(),
+                            "action": action,
+                        },
+                    }
+                )
+            elif action == "nullify":
+                cleaned_df.loc[future_mask, col] = pd.NaT
+                logs.append(
+                    {
+                        "timestamp": datetime.now().isoformat(),
+                        "step": "handle_future_dates",
+                        "column": col,
+                        "method": "nullify_future_dates",
+                        "rows_affected": future_count,
+                        "action": f"Set {future_count} future dates in '{col}' to NaT",
+                        "details": {"future_dates_count": future_count},
+                    }
+                )
+            elif action == "flag":
+                logs.append(
+                    {
+                        "timestamp": datetime.now().isoformat(),
+                        "step": "handle_future_dates",
+                        "column": col,
+                        "method": "flag_future_dates",
+                        "rows_affected": future_count,
+                        "action": f"Flagged {future_count} future dates in '{col}' (retained)",
+                        "details": {"future_dates_count": future_count},
+                    }
+                )
+
+    return cleaned_df, logs
+
+
+def standardize_text(
+    df: pd.DataFrame,
+    columns: Optional[List[str]] = None,
+) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
+    """Standardize string/categorical columns: strip whitespace, title-case, merge synonyms.
+
+    Specifically:
+    - Merges region variants (east/East/EAST) down to 4 canonical title-case regions.
+    - Merges gender variants (male/MALE/M/Male, female/FEMALE/F/Female) down to 2 values.
+
+    Args:
+        df: Input DataFrame.
+        columns: Optional list of text columns to standardize. If None, targets
+                 all object/categorical columns excluding ID-like columns.
+
+    Returns:
+        Tuple of (cleaned DataFrame copy, list of audit log entries).
+    """
+    cleaned_df = df.copy()
+    logs: List[Dict[str, Any]] = []
+
+    target_cols = columns or list(cleaned_df.columns)
+
+    for col in target_cols:
+        if col not in cleaned_df.columns:
+            continue
+        series = cleaned_df[col]
+
+        is_text_type = (
+            pd.api.types.is_string_dtype(series)
+            or pd.api.types.is_object_dtype(series)
+            or isinstance(series.dtype, pd.CategoricalDtype)
+        )
+        if not is_text_type:
+            continue
+        if pd.api.types.is_datetime64_any_dtype(series):
+            continue
+
+        sem_type, _ = infer_column_semantic_type(series)
+        if sem_type in ("id_like", "numeric", "datetime"):
+            continue
+
+        orig_unique = int(series.dropna().nunique())
+
+        # 1. Whitespace stripping and internal space compression
+        cleaned_series = (
+            series.dropna()
+            .astype(str)
+            .str.strip()
+            .str.replace(r"\s+", " ", regex=True)
+        )
+
+        col_lower = col.lower()
+
+        # 2. Gender synonym merging (Male / Female)
+        if "gender" in col_lower or "sex" in col_lower:
+            cleaned_series = cleaned_series.apply(
+                lambda x: GENDER_SYNONYMS.get(x.lower(), x.title())
+            )
+        # 3. Region and general categoricals: standardize to Title Case
+        else:
+            cleaned_series = cleaned_series.str.title()
+
+        cleaned_df[col] = cleaned_df[col].copy()
+        cleaned_df.loc[cleaned_series.index, col] = cleaned_series
+
+        new_unique = int(cleaned_df[col].dropna().nunique())
+
+        logs.append(
+            {
+                "timestamp": datetime.now().isoformat(),
+                "step": "standardize_text",
+                "column": col,
+                "method": "title_case_and_synonyms",
+                "rows_affected": len(cleaned_series),
+                "action": f"Standardized text casing and variants in '{col}'",
+                "details": {
+                    "original_unique_values": orig_unique,
+                    "standardized_unique_values": new_unique,
+                    "unique_values_sample": cleaned_df[col].dropna().unique().tolist()[:10],
+                },
+            }
+        )
+
+    return cleaned_df, logs
+
+
+def correct_negative_anomalies(
+    df: pd.DataFrame,
+    columns: Optional[List[str]] = None,
+) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
+    """Correct negative values in inherently positive domains (e.g. age, quantity).
+
+    Args:
+        df: Input DataFrame.
+        columns: Optional list of numeric columns. If None, inspects columns
+                 known to be strictly positive (age, quantity, price, rating).
+
+    Returns:
+        Tuple of (cleaned DataFrame copy, list of audit log entries).
+    """
+    cleaned_df = df.copy()
+    logs: List[Dict[str, Any]] = []
+
+    positive_keywords = ["age", "quantity", "unit_price", "price", "rating", "rating_score"]
+    candidate_cols = columns or [
+        c for c in cleaned_df.columns if any(k in c.lower() for k in positive_keywords)
+    ]
+
+    for col in candidate_cols:
+        if col not in cleaned_df.columns:
+            continue
+        series = cleaned_df[col]
+        if not pd.api.types.is_numeric_dtype(series):
+            continue
+
+        neg_mask = series < 0
+        neg_count = int(neg_mask.sum())
+        if neg_count > 0:
+            cleaned_df[col] = series.abs()
+            logs.append(
+                {
+                    "timestamp": datetime.now().isoformat(),
+                    "step": "correct_negatives",
+                    "column": col,
+                    "method": "absolute_value",
+                    "rows_affected": neg_count,
+                    "action": f"Converted {neg_count} negative entries in '{col}' to positive",
+                    "details": {"negatives_inverted": neg_count},
+                }
+            )
+
+    return cleaned_df, logs
+
+
+def handle_outliers(
+    df: pd.DataFrame,
+    columns: Optional[List[str]] = None,
+    method: str = "iqr",
+    factor: float = 1.5,
+    action: str = "clip",
+) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
+    """Detect and treat numerical outliers using IQR or Z-score thresholds.
+
+    Args:
+        df: Input DataFrame.
+        columns: Optional list of numeric columns. If None, targets all numeric columns.
+        method: Detection strategy ('iqr' or 'zscore').
+        factor: Threshold multiplier (default 1.5 for IQR, 3.0 for Z-score).
+        action: Treatment action ('clip' to cap at boundaries, 'remove', or 'nullify').
+
+    Returns:
+        Tuple of (cleaned DataFrame copy, list of audit log entries).
+    """
+    cleaned_df = df.copy()
+    logs: List[Dict[str, Any]] = []
+
+    target_cols = columns or [
+        c for c in cleaned_df.columns if pd.api.types.is_numeric_dtype(cleaned_df[c])
+    ]
+
+    for col in target_cols:
+        if col not in cleaned_df.columns:
+            continue
+        series = cleaned_df[col].dropna()
+        if len(series) < 10 or series.nunique() <= 2:
+            continue
+
+        if method == "iqr":
+            q1 = float(series.quantile(0.25))
+            q3 = float(series.quantile(0.75))
+            iqr = q3 - q1
+            if iqr <= 0:
+                continue
+            lower_bound = q1 - (factor * iqr)
+            upper_bound = q3 + (factor * iqr)
+        elif method == "zscore":
+            mean = float(series.mean())
+            std = float(series.std())
+            if std <= 0:
+                continue
+            lower_bound = mean - (factor * std)
+            upper_bound = mean + (factor * std)
+        else:
+            raise ValueError(f"Unknown outlier detection method '{method}'")
+
+        outlier_mask = (cleaned_df[col] < lower_bound) | (cleaned_df[col] > upper_bound)
+        outlier_count = int(outlier_mask.sum())
+
+        if outlier_count > 0:
+            if action == "clip":
+                cleaned_df[col] = cleaned_df[col].clip(lower=lower_bound, upper=upper_bound)
+                logs.append(
+                    {
+                        "timestamp": datetime.now().isoformat(),
+                        "step": "handle_outliers",
+                        "column": col,
+                        "method": f"{method}_clipping",
+                        "rows_affected": outlier_count,
+                        "action": (
+                            f"Clipped {outlier_count} outliers in '{col}' using {method.upper()}"
+                        ),
+                        "details": {
+                            "method": method,
+                            "factor": factor,
+                            "lower_bound": round(lower_bound, 4),
+                            "upper_bound": round(upper_bound, 4),
+                            "outliers_treated": outlier_count,
+                            "action": action,
+                        },
+                    }
+                )
+            elif action == "nullify":
+                cleaned_df.loc[outlier_mask, col] = np.nan
+                logs.append(
+                    {
+                        "timestamp": datetime.now().isoformat(),
+                        "step": "handle_outliers",
+                        "column": col,
+                        "method": f"{method}_nullify",
+                        "rows_affected": outlier_count,
+                        "action": f"Set {outlier_count} outliers in '{col}' to NaN",
+                        "details": {"outliers_nullified": outlier_count},
+                    }
+                )
+            elif action == "remove":
+                cleaned_df = cleaned_df[~outlier_mask].copy().reset_index(drop=True)
+                logs.append(
+                    {
+                        "timestamp": datetime.now().isoformat(),
+                        "step": "handle_outliers",
+                        "column": col,
+                        "method": f"{method}_row_removal",
+                        "rows_affected": outlier_count,
+                        "action": f"Dropped {outlier_count} rows with outliers in '{col}'",
+                        "details": {"rows_removed": outlier_count},
+                    }
+                )
+
+    return cleaned_df, logs
+
+
+def impute_missing_values(
+    df: pd.DataFrame,
+    numeric_strategy: str = "median",
+    categorical_strategy: str = "mode",
+    columns: Optional[Dict[str, str]] = None,
+) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
+    """Impute missing values in numeric and categorical columns.
+
+    Args:
+        df: Input DataFrame.
+        numeric_strategy: Default strategy for numeric columns ('median', 'mean', 'zero').
+        categorical_strategy: Default strategy for categoricals ('mode', 'constant').
+        columns: Optional dictionary mapping column names to custom strategies.
+
+    Returns:
+        Tuple of (cleaned DataFrame copy, list of audit log entries).
+    """
+    cleaned_df = df.copy()
+    logs: List[Dict[str, Any]] = []
+
+    custom_rules = columns or {}
+
+    for col in cleaned_df.columns:
+        series = cleaned_df[col]
+        missing_count = int(series.isna().sum())
+        if missing_count == 0:
+            continue
+
+        strategy = custom_rules.get(col)
+        imputed_val: Any = None
+
+        if pd.api.types.is_numeric_dtype(series):
+            eff_strategy = strategy or numeric_strategy
+            if eff_strategy == "median":
+                imputed_val = series.median()
+                if pd.api.types.is_integer_dtype(series):
+                    imputed_val = round(float(imputed_val))
+            elif eff_strategy == "mean":
+                imputed_val = series.mean()
+            elif eff_strategy == "zero":
+                imputed_val = 0
+            else:
+                imputed_val = series.median()
+
+            cleaned_df[col] = series.fillna(imputed_val)
+
+        elif pd.api.types.is_datetime64_any_dtype(series):
+            cleaned_df[col] = series.bfill().ffill()
+            eff_strategy = "bfill_ffill"
+
+        else:
+            eff_strategy = strategy or categorical_strategy
+            if eff_strategy == "mode":
+                mode_vals = series.mode()
+                imputed_val = mode_vals.iloc[0] if len(mode_vals) > 0 else "Unknown"
+            elif eff_strategy == "constant":
+                imputed_val = "Missing"
+            else:
+                mode_vals = series.mode()
+                imputed_val = mode_vals.iloc[0] if len(mode_vals) > 0 else "Unknown"
+
+            cleaned_df[col] = series.fillna(imputed_val)
+
+        logs.append(
+            {
+                "timestamp": datetime.now().isoformat(),
+                "step": "impute_missing",
+                "column": col,
+                "method": eff_strategy,
+                "rows_affected": missing_count,
+                "action": f"Imputed {missing_count} missing values in '{col}' using {eff_strategy}",
+                "details": {
+                    "strategy": eff_strategy,
+                    "missing_imputed": missing_count,
+                    "imputed_value": str(imputed_val),
+                },
+            }
+        )
+
+    return cleaned_df, logs
 
 
 def clean_data(
     df: pd.DataFrame, config: Optional[Dict[str, Any]] = None
 ) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
-    """Clean the input DataFrame and return a cleaned copy and audit log.
+    """Execute complete, non-destructive data cleaning pipeline with comprehensive audit log.
+
+    Orchestrates:
+    1. Duplicate row removal
+    2. Structural defect handling (drops 100% null columns)
+    3. Currency string parsing to float64
+    4. Mixed datetime parsing and standardization
+    5. Future date anomaly detection and treatment
+    6. Text standardization (whitespace trimming, case normalization, category canonicalization)
+    7. Negative value correction for positive domain metrics (prior to imputation)
+    8. Outlier detection and treatment (IQR boundary clipping)
+    9. Missing value imputation
 
     Args:
-        df: Original DataFrame (will not be modified).
-        config: Optional configuration dictionary overriding default rules.
+        df: Raw input DataFrame (guaranteed not modified).
+        config: Optional configuration overrides. Supports:
+            - 'deduplicate': bool (default True)
+            - 'drop_all_null': bool (default True)
+            - 'drop_constant': bool (default False)
+            - 'clean_currency': bool (default True)
+            - 'clean_datetime': bool (default True)
+            - 'handle_future_dates': bool (default True)
+            - 'future_date_action': 'cap', 'nullify', 'flag' (default 'cap')
+            - 'standardize_text': bool (default True)
+            - 'correct_negatives': bool (default True)
+            - 'handle_outliers': bool (default True)
+            - 'outlier_method': 'iqr' or 'zscore' (default 'iqr')
+            - 'outlier_factor': float (default 1.5)
+            - 'outlier_action': 'clip', 'remove', 'nullify' (default 'clip')
+            - 'impute_missing': bool (default True)
+            - 'numeric_impute_strategy': 'median' or 'mean' (default 'median')
+            - 'categorical_impute_strategy': 'mode' or 'constant' (default 'mode')
 
     Returns:
-        Tuple of (cleaned DataFrame copy, list of log entry dictionaries).
+        Tuple of (cleaned DataFrame copy, list of audit log entries).
     """
-    raise NotImplementedError("Cleaning engine will be implemented in Phase 2")
+    cfg = config or {}
+    cleaned_df = df.copy(deep=True)
+    audit_trail: List[Dict[str, Any]] = []
+
+    # 1. Deduplication
+    if cfg.get("deduplicate", True):
+        cleaned_df, dup_log = deduplicate_data(cleaned_df)
+        if dup_log["details"]["rows_removed"] > 0:
+            audit_trail.append(dup_log)
+
+    # 2. Structural defects (all-null and constant columns)
+    cleaned_df, struct_logs = handle_structural_defects(
+        cleaned_df,
+        drop_all_null=cfg.get("drop_all_null", True),
+        drop_constant=cfg.get("drop_constant", False),
+    )
+    audit_trail.extend(struct_logs)
+
+    # 3. Currency and numeric strings
+    if cfg.get("clean_currency", True):
+        cleaned_df, curr_logs = clean_currency_and_numeric_strings(cleaned_df)
+        audit_trail.extend(curr_logs)
+
+    # 4. Mixed datetime formats
+    if cfg.get("clean_datetime", True):
+        cleaned_df, date_logs = clean_datetime_columns(cleaned_df)
+        audit_trail.extend(date_logs)
+
+    # 5. Future date anomaly detection and treatment
+    if cfg.get("handle_future_dates", True):
+        cleaned_df, future_logs = handle_future_dates(
+            cleaned_df,
+            action=cfg.get("future_date_action", "cap"),
+        )
+        audit_trail.extend(future_logs)
+
+    # 6. Text standardization
+    if cfg.get("standardize_text", True):
+        cleaned_df, text_logs = standardize_text(cleaned_df)
+        audit_trail.extend(text_logs)
+
+    # 7. Correct negative anomalies (MUST happen before imputation so median is uncorrupted)
+    if cfg.get("correct_negatives", True):
+        cleaned_df, neg_logs = correct_negative_anomalies(cleaned_df)
+        audit_trail.extend(neg_logs)
+
+    # 8. Outliers
+    if cfg.get("handle_outliers", True):
+        cleaned_df, outlier_logs = handle_outliers(
+            cleaned_df,
+            method=cfg.get("outlier_method", "iqr"),
+            factor=cfg.get("outlier_factor", 1.5),
+            action=cfg.get("outlier_action", "clip"),
+        )
+        audit_trail.extend(outlier_logs)
+
+    # 9. Missing value imputation
+    if cfg.get("impute_missing", True):
+        cleaned_df, impute_logs = impute_missing_values(
+            cleaned_df,
+            numeric_strategy=cfg.get("numeric_impute_strategy", "median"),
+            categorical_strategy=cfg.get("categorical_impute_strategy", "mode"),
+        )
+        audit_trail.extend(impute_logs)
+
+    return cleaned_df, audit_trail
