@@ -189,7 +189,7 @@ def make_messy_sales(num_rows: int = 5000) -> pd.DataFrame:
     df["revenue"] = currency_rev
 
     # 6. Inconsistent text categories
-    gender_variants = ["Male", "male", "M", "MALE", "Female", "female", "F", "FEMALE", "Non-Binary"]
+    gender_variants = ["Male", "male", "M", "MALE", "Female", "female", "F", "FEMALE"]
     region_variants = {
         "North": ["North", "north ", "NORTH", " north"],
         "South": ["South", "south", "SOUTH ", " south"],
