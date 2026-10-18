@@ -182,6 +182,39 @@ def test_handle_outliers_clipping() -> None:
     assert logs[0]["step"] == "handle_outliers"
 
 
+def test_small_integer_quantity_validated_not_iqr_capped() -> None:
+    """Verify small integer columns like quantity are validated >= 1, not IQR capped."""
+    df_sample = pd.DataFrame(
+        {
+            "quantity": [1, 2, 1, 3, 2, 1, 10, 10, 0, -2],
+        }
+    )
+    cleaned_df, logs = handle_outliers(df_sample, columns=["quantity"])
+    assert len(logs) == 1
+    assert logs[0]["method"] == "domain_validation"
+    # Values of 10 must NOT be capped
+    assert (cleaned_df["quantity"] == 10).sum() == 2
+    # Invalid values (0 and -2) must be flagged and set to NaN
+    assert logs[0]["rows_affected"] == 2
+    assert cleaned_df["quantity"].isna().sum() == 2
+
+
+def test_non_negative_iqr_lower_bounds_clamped_to_zero() -> None:
+    """Verify IQR lower bounds for revenue and price do not go below 0, while profit may."""
+    df_sample = pd.DataFrame(
+        {
+            "revenue": [50.0, 55.0, 60.0, 52.0, 58.0, 54.0, 56.0, 53.0, 55.0, 50000.0],
+            "profit": [10.0, -10.0, 5.0, -5.0, 8.0, -8.0, 6.0, -6.0, 7.0, 20000.0],
+        }
+    )
+    _, logs = handle_outliers(df_sample, columns=["revenue", "profit"], method="iqr")
+    rev_log = next(entry for entry in logs if entry["column"] == "revenue")
+    profit_log = next(entry for entry in logs if entry["column"] == "profit")
+
+    assert rev_log["details"]["lower_limit"] >= 0.0, "Revenue lower bound must be >= 0"
+    assert profit_log["details"]["lower_limit"] < 0.0, "Profit lower bound may remain negative"
+
+
 def test_impute_missing_values() -> None:
     """Verify missing value imputation for both numeric and categorical columns."""
     df_sample = pd.DataFrame(

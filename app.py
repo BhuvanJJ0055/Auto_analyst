@@ -263,6 +263,9 @@ def format_audit_details(step: str, details: Any) -> str:
         return f"{neg} negative domain values set to missing (to be filled by median)"
 
     if step == "handle_outliers":
+        if details.get("method") == "domain_validation":
+            inv = details.get("outliers_treated", 0)
+            return f"Small integer validation: min >= 1 ({inv} invalid flagged)"
         low = details.get("lower_limit", "")
         high = details.get("upper_limit", "")
         act = details.get("action", "clipped")

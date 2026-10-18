@@ -615,9 +615,72 @@ def handle_outliers(
         if len(series) < 10 or series.nunique() <= 2:
             continue
 
+        col_lower = col.lower()
+        is_non_negative_metric = any(
+            k in col_lower for k in ["revenue", "price", "unit_price", "cost", "quantity", "sales"]
+        )
+
+        # For small integer columns (e.g. quantity), validate instead of IQR capping
+        is_small_integer = (
+            col_lower in ["quantity", "qty", "items_count"]
+            or (
+                pd.api.types.is_integer_dtype(series)
+                and series.max() <= 100
+                and series.nunique() <= 30
+            )
+        )
+        if is_small_integer:
+            invalid_mask = cleaned_df[col] < 1
+            invalid_count = int(invalid_mask.sum())
+            if invalid_count > 0:
+                cleaned_df.loc[invalid_mask, col] = np.nan
+                logs.append(
+                    {
+                        "timestamp": datetime.now().isoformat(),
+                        "step": "handle_outliers",
+                        "column": col,
+                        "method": "domain_validation",
+                        "rows_affected": invalid_count,
+                        "action": (
+                            f"Validated small integer column '{col}' "
+                            f"(flagged {invalid_count} values < 1)"
+                        ),
+                        "details": {
+                            "method": "domain_validation",
+                            "min_allowed": 1,
+                            "lower_limit": 1,
+                            "upper_limit": None,
+                            "outliers_treated": invalid_count,
+                            "action": "flag_invalid",
+                        },
+                    }
+                )
+            else:
+                logs.append(
+                    {
+                        "timestamp": datetime.now().isoformat(),
+                        "step": "handle_outliers",
+                        "column": col,
+                        "method": "domain_validation",
+                        "rows_affected": 0,
+                        "action": (
+                            f"Validated small integer column '{col}' "
+                            f"(all values >= 1; 0 flagged)"
+                        ),
+                        "details": {
+                            "method": "domain_validation",
+                            "min_allowed": 1,
+                            "lower_limit": 1,
+                            "upper_limit": None,
+                            "outliers_treated": 0,
+                            "action": "validated",
+                        },
+                    }
+                )
+            continue
+
         active_group = group_col
         if not active_group:
-            col_lower = col.lower()
             if ("price" in col_lower or "cost" in col_lower) and candidate_product_col:
                 active_group = candidate_product_col
             elif ("price" in col_lower or "cost" in col_lower) and candidate_category_col:
@@ -653,6 +716,10 @@ def handle_outliers(
                 else:
                     raise ValueError(f"Unknown outlier detection method '{method}'")
 
+                # Ensure non-negative columns do not have negative lower bounds
+                if is_non_negative_metric:
+                    low = max(0.0, low)
+
                 lower_bounds.append(low)
                 upper_bounds.append(high)
 
@@ -673,6 +740,8 @@ def handle_outliers(
 
             if total_outliers > 0:
                 min_low = round(min(lower_bounds), 4) if lower_bounds else 0.0
+                if is_non_negative_metric:
+                    min_low = max(0.0, min_low)
                 max_high = round(max(upper_bounds), 4) if upper_bounds else 0.0
                 logs.append(
                     {
@@ -714,6 +783,10 @@ def handle_outliers(
                 upper_bound = mean + (factor * std)
             else:
                 raise ValueError(f"Unknown outlier detection method '{method}'")
+
+            # Ensure non-negative columns do not have negative lower bounds
+            if is_non_negative_metric:
+                lower_bound = max(0.0, lower_bound)
 
             outlier_mask = (cleaned_df[col] < lower_bound) | (cleaned_df[col] > upper_bound)
             outlier_count = int(outlier_mask.sum())
