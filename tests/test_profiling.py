@@ -99,3 +99,21 @@ def test_original_dataframe_immutability() -> None:
 
     _ = profile_data(df_orig)
     pd.testing.assert_frame_equal(df_orig, df_copy)
+
+
+def test_quality_score_benchmark_thresholds() -> None:
+    """Assert messy_sales.csv scores below 80 and clean_sales.csv scores above 95."""
+    clean_path = SAMPLE_DATA_DIR / "clean_sales.csv"
+    messy_path = SAMPLE_DATA_DIR / "messy_sales.csv"
+
+    df_clean, _ = load_file(clean_path)
+    df_messy, _ = load_file(messy_path)
+
+    clean_profile = profile_data(df_clean)
+    messy_profile = profile_data(df_messy)
+
+    clean_score = clean_profile["quality_score"]["score"]
+    messy_score = messy_profile["quality_score"]["score"]
+
+    assert clean_score > 95.0, f"clean_sales.csv score ({clean_score}) must be above 95"
+    assert messy_score < 80.0, f"messy_sales.csv score ({messy_score}) must be below 80"
