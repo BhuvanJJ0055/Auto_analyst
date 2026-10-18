@@ -375,3 +375,102 @@ def test_outlier_capping_under_five_percent_and_product_price_preservation() -> 
         assert "lower_limit" in details or "lower_bound" in details
         assert "upper_limit" in details or "upper_bound" in details
         assert o_log["rows_affected"] >= 0
+
+
+def test_rows_affected_matches_actual_changed_cells_deduplication() -> None:
+    """Verify log 'rows_affected' strictly equals actual removed rows for deduplication."""
+    # 1. Synthetic case: 3 duplicate rows out of 7
+    df_sample = pd.DataFrame(
+        {
+            "id": [1, 2, 2, 3, 3, 3, 4],
+            "val": ["a", "b", "b", "c", "c", "c", "d"],
+        }
+    )
+    cleaned_df, log = deduplicate_data(df_sample)
+    actual_removed = len(df_sample) - len(cleaned_df)
+    assert actual_removed == 3
+    assert log["rows_affected"] == actual_removed
+    assert log["details"]["rows_removed"] == actual_removed
+
+    # 2. Benchmark dataset case: exactly 140 duplicate rows
+    messy_path = SAMPLE_DATA_DIR / "messy_sales.csv"
+    df_messy, _ = load_file(messy_path)
+    cleaned_messy, dup_log = deduplicate_data(df_messy)
+    actual_messy_removed = len(df_messy) - len(cleaned_messy)
+    assert actual_messy_removed == 140
+    assert dup_log["rows_affected"] == actual_messy_removed
+    assert dup_log["details"]["rows_removed"] == actual_messy_removed
+
+
+def test_rows_affected_matches_actual_changed_cells_text_standardization() -> None:
+    """Verify log 'rows_affected' strictly equals actual changed cells for text standardization."""
+    # 1. Synthetic case: 3 out of 6 regions and 2 out of 6 genders need standardization
+    df_sample = pd.DataFrame(
+        {
+            "region": ["East", "east ", "NORTH", "North", "South", "south"],
+            "gender": ["Male", "male", "Female", "FEMALE", "Male", "Female"],
+        }
+    )
+    cleaned_df, logs = standardize_text(df_sample)
+
+    for log in logs:
+        col = log["column"]
+        orig_s = df_sample[col].astype(str)
+        cleaned_s = cleaned_df[col].astype(str)
+        actual_changed = int((orig_s != cleaned_s).sum())
+        assert log["rows_affected"] == actual_changed
+        assert log["details"]["cells_changed"] == actual_changed
+
+    region_log = next(log for log in logs if log["column"] == "region")
+    assert region_log["rows_affected"] == 3
+
+    gender_log = next(log for log in logs if log["column"] == "gender")
+    assert gender_log["rows_affected"] == 2
+
+    # 2. Benchmark messy_sales.csv case: verify exact changed cell count per column
+    messy_path = SAMPLE_DATA_DIR / "messy_sales.csv"
+    df_messy, _ = load_file(messy_path)
+    df_dedup, _ = deduplicate_data(df_messy)
+    cleaned_messy, m_logs = standardize_text(df_dedup)
+
+    for m_log in m_logs:
+        col = m_log["column"]
+        orig_s = df_dedup[col].dropna().astype(str)
+        clean_s = cleaned_messy[col].dropna().astype(str)
+        actual_changed = int((orig_s != clean_s).sum())
+        assert m_log["rows_affected"] == actual_changed
+        assert m_log["details"]["cells_changed"] == actual_changed
+
+
+def test_rows_affected_matches_actual_changed_cells_outlier_capping() -> None:
+    """Verify log 'rows_affected' strictly equals actual clipped cells for outlier capping."""
+    # 1. Synthetic case: exactly 2 outliers above IQR fence (1000 and 2000)
+    df_sample = pd.DataFrame(
+        {
+            "sales": [10.0, 11.0, 10.5, 9.8, 10.2, 10.1, 10.4, 10.3, 1000.0, 2000.0],
+        }
+    )
+    cleaned_df, logs = handle_outliers(
+        df_sample, columns=["sales"], method="iqr", factor=1.5, action="clip"
+    )
+    actual_clipped = int((df_sample["sales"] != cleaned_df["sales"]).sum())
+    assert actual_clipped == 2
+    assert logs[0]["rows_affected"] == actual_clipped
+    assert logs[0]["details"]["outliers_treated"] == actual_clipped
+
+    # 2. Benchmark dataset case: verify every outlier log entry matches actual cell diffs
+    messy_path = SAMPLE_DATA_DIR / "messy_sales.csv"
+    df_messy, _ = load_file(messy_path)
+    df_stage = df_messy.copy(deep=True)
+    df_stage, _ = deduplicate_data(df_stage)
+    df_stage, _ = clean_currency_and_numeric_strings(df_stage)
+    df_stage, _ = correct_negative_anomalies(df_stage)
+
+    df_cleaned_outliers, outlier_logs = handle_outliers(
+        df_stage, method="iqr", factor=3.0, action="clip"
+    )
+    for o_log in outlier_logs:
+        col = o_log["column"]
+        actual_diff = int((df_stage[col] != df_cleaned_outliers[col]).sum())
+        assert o_log["rows_affected"] == actual_diff
+        assert o_log["details"]["outliers_treated"] == actual_diff
