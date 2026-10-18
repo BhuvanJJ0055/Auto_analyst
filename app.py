@@ -206,6 +206,86 @@ def cached_clean_data(
     return clean_data(df, config=config)
 
 
+def format_audit_details(step: str, details: Any) -> str:
+    """Format operation metadata details dictionary into concise human-readable summary text."""
+    if not isinstance(details, dict):
+        return str(details)
+
+    if step == "deduplication":
+        removed = details.get("rows_removed", 0)
+        remaining = details.get("rows_remaining", 0)
+        return f"{removed} duplicate rows removed ({remaining} rows remaining)"
+
+    if step == "drop_all_null_column":
+        rows = details.get("total_rows", 0)
+        return f"100% missing (0 non-null values across {rows} rows)"
+
+    if step == "drop_constant_column":
+        val = details.get("constant_value", "")
+        return f"Dropped single constant value: '{val}'"
+
+    if step == "flag_constant_column":
+        val = details.get("constant_value", "")
+        return f"Business constant retained: '{val}'"
+
+    if step == "clean_currency_strings":
+        cells = details.get("cells_changed", details.get("parsed_values", 0))
+        new_dtype = details.get("new_dtype", "float64")
+        return f"{cells} currency strings normalized to {new_dtype}"
+
+    if step == "clean_datetime":
+        cells = details.get("cells_changed", details.get("parsed_count", 0))
+        min_d = str(details.get("min_date", ""))[:10]
+        max_d = str(details.get("max_date", ""))[:10]
+        span_str = f" ({min_d} to {max_d})" if min_d and max_d else ""
+        return f"{cells} date strings parsed to datetime{span_str}"
+
+    if step == "handle_future_dates":
+        flagged = details.get("future_dates_flagged", details.get("future_dates_count", 0))
+        act = details.get("action", "nullify")
+        thresh = details.get("threshold_date", "")
+        thresh_str = f" [fence > {thresh}]" if thresh else ""
+        if act == "nullify":
+            return f"{flagged} future dates flagged and set to NaT{thresh_str}"
+        elif act == "cap":
+            cap_lim = details.get("cap_target", "")
+            return f"{flagged} future dates flagged and capped at {cap_lim}"
+        return f"{flagged} future dates flagged (retained){thresh_str}"
+
+    if step == "standardize_text":
+        changed = details.get("cells_changed", 0)
+        orig_u = details.get("original_unique_values", 0)
+        new_u = details.get("standardized_unique_values", 0)
+        return f"{changed} cells changed ({orig_u} variants -> {new_u} canonical categories)"
+
+    if step == "correct_negatives":
+        neg = details.get("negatives_inverted", 0)
+        return f"{neg} negative domain values converted to positive (abs)"
+
+    if step == "handle_outliers":
+        low = details.get("lower_limit", "")
+        high = details.get("upper_limit", "")
+        act = details.get("action", "clipped")
+        grp = details.get("group_by")
+        grp_str = f" grouped by {grp}" if grp else ""
+        return f"{act.capitalize()} at statistical bounds [{low}, {high}]{grp_str}"
+
+    if step == "impute_missing":
+        strat = details.get("strategy", "")
+        filled = details.get("missing_imputed", 0)
+        val = details.get("imputed_value", "")
+        return f"{filled} nulls filled using {strat} strategy (fill value: {val})"
+
+    # Clean key-value pairs fallback
+    parts = []
+    for k, v in details.items():
+        if isinstance(v, (list, dict)):
+            continue
+        clean_k = k.replace("_", " ").title()
+        parts.append(f"{clean_k}: {v}")
+    return "; ".join(parts[:3]) if parts else str(details)
+
+
 # Sidebar Configuration
 with st.sidebar:
     st.header("⚙️ Configuration")
@@ -812,11 +892,21 @@ if df_loaded is not None and ingestion_meta is not None:
                         "Method": item.get("method"),
                         "Rows Affected": item.get("rows_affected"),
                         "Action Performed": item.get("action"),
-                        "Details": str(item.get("details")),
+                        "Details": format_audit_details(
+                            str(item.get("step", "")), item.get("details", {})
+                        ),
                     }
                 )
             log_df = pd.DataFrame(log_records)
             st.dataframe(log_df, use_container_width=True)
+
+            with st.expander("🔍 View Technical Parameter Details per Operation (JSON)"):
+                for idx, item in enumerate(audit_log, 1):
+                    op_step = item.get("step")
+                    op_col = item.get("column")
+                    op_act = item.get("action")
+                    st.markdown(f"**#{idx} [{op_step}] `{op_col}`** — *{op_act}*")
+                    st.json(item.get("details", {}))
 
             with dl_col2:
                 log_csv_bytes = log_df.to_csv(index=False).encode("utf-8")
