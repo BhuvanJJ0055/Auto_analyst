@@ -404,6 +404,9 @@ if df_loaded is not None and ingestion_meta is not None:
     with st.spinner("Profiling dataset health and computing quality score..."):
         profile = cached_profile_data(df_loaded)
 
+    # Baseline cleaned dataset available across all tabs
+    df_cleaned, _ = cached_clean_data(df_loaded)
+
     quality = profile["quality_score"]
     grade = quality["grade"]
     score_val = quality["score"]
