@@ -11,8 +11,19 @@ import pandas as pd
 import streamlit as st
 
 from modules.cleaning import clean_data
+from modules.eda import compute_timeseries_analysis, run_eda
 from modules.ingestion import IngestionError, get_excel_sheet_names, load_file
 from modules.profiling import profile_data
+from modules.visualization import (
+    create_boxplot,
+    create_categorical_bar,
+    create_correlation_heatmap,
+    create_grouped_bar,
+    create_histogram,
+    create_scatter_plot,
+    create_timeseries_chart,
+    generate_visualizations,
+)
 
 # Page configuration
 st.set_page_config(
@@ -206,6 +217,19 @@ def cached_clean_data(
     return clean_data(df, config=config)
 
 
+@st.cache_data(show_spinner=False)
+def cached_run_eda(df: pd.DataFrame) -> Dict[str, Any]:
+    """Cached exploratory statistical analysis wrapper."""
+    return run_eda(df)
+
+
+@st.cache_data(show_spinner=False)
+def cached_generate_visualizations(df: pd.DataFrame) -> Any:
+    """Cached visualization generation wrapper."""
+    eda_res = run_eda(df)
+    return generate_visualizations(df, eda_results=eda_res)
+
+
 def format_audit_details(step: str, details: Any) -> str:
     """Format operation metadata details dictionary into concise human-readable summary text."""
     if not isinstance(details, dict):
@@ -297,7 +321,7 @@ def format_audit_details(step: str, details: Any) -> str:
 # Sidebar Configuration
 with st.sidebar:
     st.header("⚙️ Configuration")
-    st.markdown("**Version:** `v0.2.0-dev (Phase 2: Cleaning Engine)`")
+    st.markdown("**Version:** `v0.3.0-dev (Phase 3: EDA & Visualization)`")
     st.divider()
 
     st.subheader("1. Ingest Dataset")
@@ -481,12 +505,13 @@ if df_loaded is not None and ingestion_meta is not None:
         )
 
     # Tabs Section
-    tab_overview, tab_preview, tab_profiling, tab_cleaning, tab_specs = st.tabs(
+    tab_overview, tab_preview, tab_profiling, tab_cleaning, tab_eda, tab_specs = st.tabs(
         [
             "🚀 Dataset Overview",
             "📂 Data Preview",
             "🔍 Column Profiling",
             "🧹 Cleaning Engine",
+            "📈 Exploratory Data Analysis",
             "📋 Technical Architecture",
         ]
     )
@@ -937,6 +962,154 @@ if df_loaded is not None and ingestion_meta is not None:
         else:
             st.info("No cleaning transformations were necessary; dataset is already clean.")
 
+    with tab_eda:
+        st.subheader("Automated Exploratory Data Analysis & Visualizations")
+        st.markdown(
+            "Synthesizes univariate distributions, bivariate correlations, hypothesis tests, "
+            "and time-series dynamics without hardcoded column assumptions. "
+            "Excludes constant business identifiers and primary keys automatically."
+        )
+
+        # Source Dataset Choice
+        dataset_choice = st.radio(
+            "Select Data Scope for EDA:",
+            ["Cleaned Dataset (Recommended)", "Raw Ingested Dataset"],
+            index=0,
+            horizontal=True,
+            help="Choose whether to run exploratory statistical analysis on cleaned data or raw ingested data.",
+        )
+        target_eda_df = df_cleaned if dataset_choice.startswith("Cleaned") else df_loaded
+
+        with st.spinner("Computing statistical metrics, correlations, and visualizations..."):
+            eda_results = cached_run_eda(target_eda_df)
+            all_charts = cached_generate_visualizations(target_eda_df)
+
+        classified = eda_results["classified_columns"]
+        excluded = eda_results["excluded_columns"]
+        num_cols = classified.get("numeric", [])
+        cat_cols = classified.get("categorical", [])
+        dt_cols = classified.get("datetime", [])
+
+        # Column Scoping Banner
+        if excluded:
+            ex_items = [f"**`{col}`**: {reason}" for col, reason in excluded.items()]
+            st.info("🛡️ **Excluded Features (Integrity Guard)**:\n\n" + "\n\n".join(f"- {item}" for item in ex_items))
+
+        scope_col1, scope_col2, scope_col3, scope_col4 = st.columns(4)
+        scope_col1.metric("Numerical Measures", len(num_cols))
+        scope_col2.metric("Categorical Features", len(cat_cols))
+        scope_col3.metric("Datetime Axes", len(dt_cols))
+        scope_col4.metric("Charts Generated", len(all_charts))
+
+        st.divider()
+
+        eda_sub_dist, eda_sub_corr, eda_sub_ts, eda_sub_gallery = st.tabs(
+            [
+                "📊 Feature Distributions",
+                "🔗 Correlations & Relationships",
+                "📈 Time-Series & Trends",
+                "🖼️ Full Visualizations Gallery",
+            ]
+        )
+
+        with eda_sub_dist:
+            st.markdown("#### Univariate Distribution Analysis")
+            if num_cols:
+                selected_num = st.selectbox("Select Numerical Measure to Inspect:", num_cols, index=0)
+                n_stats = eda_results["univariate_numeric"].get(selected_num, {})
+
+                # Metric Cards Row
+                stat_col1, stat_col2, stat_col3, stat_col4 = st.columns(4)
+                stat_col1.metric("Mean", f"{n_stats.get('mean', 0.0):,.2f}")
+                stat_col2.metric("Median", f"{n_stats.get('median', 0.0):,.2f}")
+                stat_col3.metric("Std Dev", f"{n_stats.get('std', 0.0):,.2f}")
+                stat_col4.metric("IQR", f"{n_stats.get('iqr', 0.0):,.2f}")
+
+                stat_col5, stat_col6, stat_col7, stat_col8 = st.columns(4)
+                stat_col5.metric("Skewness", f"{n_stats.get('skewness', 0.0):.2f}")
+                stat_col6.metric("Kurtosis", f"{n_stats.get('kurtosis', 0.0):.2f}")
+                is_norm = n_stats.get("is_normal", False)
+                stat_col7.metric("Distribution", "Normal (p > 0.05)" if is_norm else "Skewed")
+                stat_col8.metric("Outliers (1.5×IQR)", f"{n_stats.get('outliers_count', 0):,}")
+
+                # Display Histogram & Boxplot
+                h_chart = create_histogram(target_eda_df[selected_num], selected_num, n_stats)
+                b_chart = create_boxplot(target_eda_df[selected_num], selected_num, n_stats)
+
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.plotly_chart(h_chart["fig"], use_container_width=True)
+                    st.caption(f"💡 {h_chart['caption']}")
+                with c2:
+                    st.plotly_chart(b_chart["fig"], use_container_width=True)
+                    st.caption(f"💡 {b_chart['caption']}")
+
+            if cat_cols:
+                st.markdown("---")
+                selected_cat = st.selectbox("Select Categorical Feature to Inspect:", cat_cols, index=0)
+                c_stats = eda_results["univariate_categorical"].get(selected_cat, {})
+                c_chart = create_categorical_bar(target_eda_df[selected_cat], selected_cat, c_stats)
+                st.plotly_chart(c_chart["fig"], use_container_width=True)
+                st.caption(f"💡 {c_chart['caption']}")
+
+        with eda_sub_corr:
+            st.markdown("#### Bivariate Correlations & Hypothesis Testing")
+            if len(num_cols) >= 2:
+                h_map = create_correlation_heatmap(eda_results["correlations"])
+                if h_map is not None:
+                    st.plotly_chart(h_map["fig"], use_container_width=True)
+                    st.caption(f"💡 {h_map['caption']}")
+
+                pairs = eda_results["correlations"].get("pairs", [])
+                if pairs:
+                    st.markdown("##### Significant Numeric Associations")
+                    pair_options = [f"{p['col1']} vs. {p['col2']} (r = {p['pearson_r']:+.2f})" for p in pairs[:5]]
+                    selected_pair_idx = st.selectbox(
+                        "Select Pair to Inspect Scatter with OLS Trendline:",
+                        range(len(pair_options)),
+                        format_func=lambda i: pair_options[i],
+                    )
+                    chosen_pair = pairs[selected_pair_idx]
+                    scatter_c = create_scatter_plot(
+                        target_eda_df, chosen_pair["col1"], chosen_pair["col2"], chosen_pair
+                    )
+                    st.plotly_chart(scatter_c["fig"], use_container_width=True)
+                    st.caption(f"💡 {scatter_c['caption']}")
+
+            if eda_results.get("group_comparisons"):
+                st.markdown("##### Categorical vs. Numerical Group Differences (ANOVA)")
+                for comp in eda_results["group_comparisons"][:2]:
+                    g_chart = create_grouped_bar(comp)
+                    st.plotly_chart(g_chart["fig"], use_container_width=True)
+                    st.caption(f"💡 {g_chart['caption']}")
+
+        with eda_sub_ts:
+            st.markdown("#### Time-Series Decomposition & Seasonality")
+            if dt_cols and num_cols:
+                dt_col = dt_cols[0]
+                selected_ts_metric = st.selectbox("Select Metric to Track Over Time:", num_cols, index=0)
+                ts_res = compute_timeseries_analysis(target_eda_df, dt_col, selected_ts_metric)
+
+                ts_col1, ts_col2, ts_col3, ts_col4 = st.columns(4)
+                ts_col1.metric("Trend Direction", ts_res["trend_direction"].title())
+                ts_col2.metric("Daily Slope", f"{ts_res['trend_slope']:+.2f} / day")
+                ts_col3.metric("R² Fit", f"{ts_res['trend_r2']:.3f}")
+                ts_col4.metric("Seasonality", ts_res["seasonal_period"] or "None detected")
+
+                ts_chart = create_timeseries_chart(ts_res)
+                if ts_chart is not None:
+                    st.plotly_chart(ts_chart["fig"], use_container_width=True)
+                    st.caption(f"💡 {ts_chart['caption']}")
+            else:
+                st.info("No datetime column detected in this dataset. Time-series analysis requires a chronological timestamp column.")
+
+        with eda_sub_gallery:
+            st.markdown(f"#### Complete Automated Chart Gallery ({len(all_charts)} Charts Generated)")
+            for idx, c in enumerate(all_charts):
+                with st.expander(f"Chart #{idx + 1}: {c['title']} ({c['chart_type'].title()})", expanded=(idx < 2)):
+                    st.plotly_chart(c["fig"], use_container_width=True)
+                    st.caption(f"💡 {c['caption']}")
+
     with tab_specs:
         st.subheader("Component Pipeline Specification")
         specs_data = [
@@ -961,13 +1134,13 @@ if df_loaded is not None and ingestion_meta is not None:
             {
                 "Phase": "Phase 3",
                 "Component": "EDA & Visualization",
-                "Status": "Planned",
+                "Status": "Completed",
                 "Deliverable": "Univariate, bivariate, timeseries & Plotly charts",
             },
             {
                 "Phase": "Phase 4",
                 "Component": "Insights Engine",
-                "Status": "Planned",
+                "Status": "Next",
                 "Deliverable": "Numerical rule-based business insights",
             },
             {
