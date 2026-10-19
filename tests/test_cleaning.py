@@ -600,10 +600,11 @@ def test_cleaned_order_date_never_contains_future_dates_and_no_fabricated_defaul
     now = pd.Timestamp.now()
     valid_dates = cleaned_df["order_date"].dropna()
 
-    # Never contains any date after today
+    # Never contains any date after today; order_date.max() <= today
+    assert cleaned_df["order_date"].max() <= now, "Cleaned order_date max exceeds current time"
     assert (valid_dates <= now).all(), "Cleaned order_date contains dates occurring after today"
 
-    # Future dates are set to NaT (missing) rather than capped to an invented date.
+    # Future dates are set to NaT (missing, not forward-filled) rather than capped to an invented date.
     # With nullification, all 35 future dates become NaT, and legitimate 2024-12-31 orders
     # remain untouched at exactly 5 (rather than swelling to 40 via fabricated capping).
     assert cleaned_df["order_date"].isna().sum() == 35, "Expected 35 nullified future date entries"
@@ -617,6 +618,10 @@ def test_cleaned_order_date_never_contains_future_dates_and_no_fabricated_defaul
     assert f_log["details"]["dates_set_to_missing"] == 35
     assert f_log["details"]["action"] == "nullify"
     assert "missing" in f_log["action"]
+
+    # Count of NaT equals count flagged in the log
+    assert cleaned_df["order_date"].isna().sum() == f_log["details"]["dates_set_to_missing"]
+    assert cleaned_df["order_date"].isna().sum() == f_log["rows_affected"]
 
     # 2. Synthetic dataset: verify no fabricated capping date is introduced by default
     df_syn = pd.DataFrame(

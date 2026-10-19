@@ -10,8 +10,8 @@ This document tracks phase-by-phase implementation status, test results, accepta
 |---|---|---|---|---|
 | **Phase 0** | **Setup & Benchmark Suite** | **Completed** | **7 / 7 (100%)** | `v0.0.0` |
 | **Phase 1** | **Ingestion & Profiling** | **Completed** | **21 / 21 (100%)** | `v0.1.0` |
-| **Phase 2** | **Cleaning Engine** | **Completed** | **32 / 32 (100%)** | `v0.2.0` (Pending Approval) |
-| Phase 3 | EDA & Visualization | Next | - | - |
+| **Phase 2** | **Cleaning Engine** | **Completed** | **45 / 45 (100%)** | `v0.2.0` |
+| **Phase 3** | **EDA & Visualization** | **In Progress** | **45 / 45 (100%)** | `v0.3.0` (Planned) |
 | Phase 4 | Insights Engine | Planned | - | - |
 | Phase 5 | Interactive Dashboard | Planned | - | - |
 | Phase 6 | Report & UI Assembly | Planned | - | - |
