@@ -752,6 +752,12 @@ def handle_outliers(
                 if is_non_negative_metric:
                     min_low = max(0.0, min_low)
                 max_high = round(max(upper_bounds), 4) if upper_bounds else 0.0
+                total_rows = len(cleaned_df)
+                pct_capped = (
+                    round((total_outliers / total_rows) * 100, 2) if total_rows > 0 else 0.0
+                )
+                exceeds_threshold = pct_capped > 5.0
+                flag_str = " [FLAGGED: >5% capped]" if exceeds_threshold else ""
                 logs.append(
                     {
                         "timestamp": datetime.now().isoformat(),
@@ -760,8 +766,9 @@ def handle_outliers(
                         "method": f"{method}_grouped_by_{active_group}",
                         "rows_affected": total_outliers,
                         "action": (
-                            f"Capped {total_outliers} outliers in '{col}' "
-                            f"grouped by '{active_group}' [limits: {min_low} to {max_high}]"
+                            f"Capped {total_outliers} outliers ({pct_capped}%) in '{col}' "
+                            f"grouped by '{active_group}' "
+                            f"[limits: {min_low} to {max_high}]{flag_str}"
                         ),
                         "details": {
                             "method": method,
@@ -770,6 +777,10 @@ def handle_outliers(
                             "lower_limit": min_low,
                             "upper_limit": max_high,
                             "outliers_treated": total_outliers,
+                            "total_rows": total_rows,
+                            "percent_capped": pct_capped,
+                            "capped_percent": pct_capped,
+                            "flagged_exceeds_5pct": exceeds_threshold,
                             "action": action,
                         },
                     }
@@ -801,6 +812,13 @@ def handle_outliers(
             outlier_count = int(outlier_mask.sum())
 
             if outlier_count > 0:
+                total_rows = len(cleaned_df)
+                pct_treated = (
+                    round((outlier_count / total_rows) * 100, 2) if total_rows > 0 else 0.0
+                )
+                exceeds_threshold = pct_treated > 5.0
+                flag_str = " [FLAGGED: >5% capped]" if exceeds_threshold else ""
+
                 if action == "clip":
                     cleaned_df[col] = cleaned_df[col].clip(lower=lower_bound, upper=upper_bound)
                     logs.append(
@@ -811,9 +829,10 @@ def handle_outliers(
                             "method": f"{method}_clipping",
                             "rows_affected": outlier_count,
                             "action": (
-                                f"Capped {outlier_count} outliers in '{col}' "
+                                f"Capped {outlier_count} outliers ({pct_treated}%) in '{col}' "
                                 f"using {method.upper()} "
                                 f"[limits: {round(lower_bound, 4)} to {round(upper_bound, 4)}]"
+                                f"{flag_str}"
                             ),
                             "details": {
                                 "method": method,
@@ -821,6 +840,10 @@ def handle_outliers(
                                 "lower_limit": round(lower_bound, 4),
                                 "upper_limit": round(upper_bound, 4),
                                 "outliers_treated": outlier_count,
+                                "total_rows": total_rows,
+                                "percent_capped": pct_treated,
+                                "capped_percent": pct_treated,
+                                "flagged_exceeds_5pct": exceeds_threshold,
                                 "action": action,
                             },
                         }
@@ -834,13 +857,20 @@ def handle_outliers(
                             "column": col,
                             "method": f"{method}_nullify",
                             "rows_affected": outlier_count,
-                            "action": f"Set {outlier_count} outliers in '{col}' to NaN",
+                            "action": (
+                                f"Set {outlier_count} outliers ({pct_treated}%) in '{col}' "
+                                f"to NaN{flag_str}"
+                            ),
                             "details": {
                                 "method": method,
                                 "factor": factor,
                                 "lower_limit": round(lower_bound, 4),
                                 "upper_limit": round(upper_bound, 4),
                                 "outliers_treated": outlier_count,
+                                "total_rows": total_rows,
+                                "percent_capped": pct_treated,
+                                "capped_percent": pct_treated,
+                                "flagged_exceeds_5pct": exceeds_threshold,
                                 "action": action,
                             },
                         }
@@ -854,13 +884,20 @@ def handle_outliers(
                             "column": col,
                             "method": f"{method}_row_removal",
                             "rows_affected": outlier_count,
-                            "action": f"Dropped {outlier_count} rows with outliers in '{col}'",
+                            "action": (
+                                f"Dropped {outlier_count} rows with outliers ({pct_treated}%) "
+                                f"in '{col}'{flag_str}"
+                            ),
                             "details": {
                                 "method": method,
                                 "factor": factor,
                                 "lower_limit": round(lower_bound, 4),
                                 "upper_limit": round(upper_bound, 4),
                                 "outliers_treated": outlier_count,
+                                "total_rows": total_rows,
+                                "percent_capped": pct_treated,
+                                "capped_percent": pct_treated,
+                                "flagged_exceeds_5pct": exceeds_threshold,
                                 "action": action,
                             },
                         }

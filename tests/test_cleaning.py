@@ -406,12 +406,17 @@ def test_outlier_capping_under_five_percent_and_product_price_preservation() -> 
             "Prices collapsed to identical ceiling"
         )
 
-    # 3. Log shows capped counts and limits
+    # 3. Log shows capped counts, percent of rows, and limits
     for o_log in outlier_logs:
         details = o_log["details"]
         assert "lower_limit" in details or "lower_bound" in details
         assert "upper_limit" in details or "upper_bound" in details
         assert o_log["rows_affected"] >= 0
+        if details.get("method") != "domain_validation":
+            assert "percent_capped" in details
+            assert "flagged_exceeds_5pct" in details
+            assert not details["flagged_exceeds_5pct"]
+            assert "%" in o_log["action"]
 
 
 def test_rows_affected_matches_actual_changed_cells_deduplication() -> None:
@@ -552,3 +557,32 @@ def test_standardize_constant_column_reports_zero_changed_cells() -> None:
     assert store_code_std_log["rows_affected"] == 0
     assert store_code_std_log["details"]["cells_changed"] == 0
     assert (cleaned_messy["store_code"] == "RETAIL-CORP-HQ").all()
+
+
+def test_outliers_capping_percent_and_flag_exceeding_threshold() -> None:
+    """Verify log reports capping as percent of rows and flags columns exceeding 5%."""
+    # 1. Column with capping <= 5% (2 outliers out of 100 rows = 2.0%)
+    normal_vals = [float(x) for x in range(10, 108)] + [5000.0, 6000.0]
+    df_low = pd.DataFrame({"metric": normal_vals})
+    _, logs_low = handle_outliers(
+        df_low, columns=["metric"], method="iqr", factor=1.5, action="clip"
+    )
+    assert len(logs_low) == 1
+    low_log = logs_low[0]
+    assert low_log["details"]["percent_capped"] == 2.0
+    assert low_log["details"]["flagged_exceeds_5pct"] is False
+    assert "2.0%" in low_log["action"]
+    assert "[FLAGGED" not in low_log["action"]
+
+    # 2. Column with capping > 5% (10 outliers out of 100 rows = 10.0%)
+    high_outlier_vals = [float(x) for x in range(10, 100)] + [5000.0] * 10
+    df_high = pd.DataFrame({"metric": high_outlier_vals})
+    _, logs_high = handle_outliers(
+        df_high, columns=["metric"], method="iqr", factor=1.5, action="clip"
+    )
+    assert len(logs_high) == 1
+    high_log = logs_high[0]
+    assert high_log["details"]["percent_capped"] == 10.0
+    assert high_log["details"]["flagged_exceeds_5pct"] is True
+    assert "10.0%" in high_log["action"]
+    assert "[FLAGGED: >5% capped]" in high_log["action"]

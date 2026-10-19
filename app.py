@@ -271,7 +271,12 @@ def format_audit_details(step: str, details: Any) -> str:
         act = details.get("action", "clipped")
         grp = details.get("group_by")
         grp_str = f" grouped by {grp}" if grp else ""
-        return f"{act.capitalize()} at statistical bounds [{low}, {high}]{grp_str}"
+        pct = details.get("percent_capped", details.get("capped_percent"))
+        pct_str = f" ({pct}% of rows)" if pct is not None else ""
+        flag_str = " [FLAGGED: >5% capped]" if details.get("flagged_exceeds_5pct") else ""
+        return (
+            f"{act.capitalize()} at statistical bounds [{low}, {high}]{grp_str}{pct_str}{flag_str}"
+        )
 
     if step == "impute_missing":
         strat = details.get("strategy", "")
