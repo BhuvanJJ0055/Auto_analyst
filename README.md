@@ -2,7 +2,8 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-7%20passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-45%20passed-brightgreen.svg)](tests/)
+[![Version](https://img.shields.io/badge/version-v0.2.0-blue.svg)](CHANGELOG.md)
 
 > Turn raw datasets into publication-ready dashboards, statistical audits, and plain-English business insights in seconds — with zero coding required.
 
@@ -27,6 +28,22 @@ AutoAnalyst is a local, privacy-first automated data analyst built with Python a
 ## 🖥️ Application Preview
 
 ![AutoAnalyst Dark Theme Overview](docs/overview_dark_mode.png)
+
+---
+
+## 🧹 Cleaning Engine — Before vs After
+
+> **v0.2.0** ships a fully-audited, non-destructive cleaning engine. Every transformation is recorded in a 19-step audit log exportable as CSV.
+
+![Cleaning Engine Before vs After](docs/cleaning_before_after.png)
+
+| Metric | Before | After |
+|--------|--------|-------|
+| Quality Score | 65.3 (Grade D) | 94.0 (Grade A) |
+| Total Rows | 5,000 | 4,860 (140 duplicates removed) |
+| Missing Cells | ~6,500 | 35 (future-date NaTs) |
+| Region Variants | 16 | 4 canonical |
+| Gender Variants | 8 | 2 canonical |
 
 ---
 

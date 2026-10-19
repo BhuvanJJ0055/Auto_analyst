@@ -5,20 +5,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.2.0] - 2026-10-19
 ### Added
-- Automated, non-destructive data cleaning engine in `modules/cleaning.py` with full provenance audit logging.
-- Deduplication with logged duplicate indices (drops 140 duplicate rows on benchmark data).
-- Automatic dropping of 100% all-null structural defect columns (`cancellation_notes`).
-- String-encoded currency parsing (`₹`, `$`, `€`, comma separators, parenthesized negatives) to native `float64`.
-- Mixed datetime parser standardizing varied date formats into `datetime64[ns]`.
-- Text standardization engine trimming whitespace, compressing internal spaces, and canonicalizing categories:
-  - Merges region variants (east/East/EAST/spaces) down to exactly 4 canonical regions (`East`, `North`, `South`, `West`).
-  - Merges gender variants (M/Male/male/F/Female/female) down to exactly 2 binary genders (`Female`, `Male`).
-- Negative value anomaly correction for strictly positive domains (e.g., negative ages).
-- Numerical outlier treatment with IQR boundary clipping (`1.5 * IQR`) neutralizing extreme revenue spikes.
-- Missing value imputation using median for skewed numeric columns and mode for categoricals.
-- Dedicated "🧹 Cleaning Engine" Streamlit UI tab with interactive configuration toggles, before/after impact comparison cards, 20-row preview, CSV export, and step-by-step audit log table.
-- Comprehensive unit and acceptance test suite in `tests/test_cleaning.py` expanding test coverage to 32 tests (100% pass rate).
+- Automated, non-destructive data cleaning engine (`modules/cleaning.py`) with 19-step provenance audit log covering every transformation applied.
+- Deduplication step with logged duplicate indices (removes 140 duplicate rows on benchmark data).
+- Automatic dropping of 100 % all-null structural defect columns (e.g. `cancellation_notes`).
+- String-encoded currency parser (`₹`, `$`, `€`, comma separators, parenthesized negatives) coercing to `float64`.
+- Mixed-format datetime parser standardising varied date strings to `datetime64[ns]`.
+- Future-date guard: flags and sets dates after today to `NaT` (default); optional `cap` mode available via config.
+- Text standardisation engine: trims whitespace, compresses internal spaces, canonicalises categories:
+  - Region variants (east/East/EAST/…) → 4 canonical values; gender variants (M/Male/male/…) → 2.
+  - Constant columns correctly report **0 cells changed** (previously over-counted).
+- Negative-value anomaly correction for strictly-positive domains: sets values to missing then lets median imputation handle them (no `abs()` distortion); count logged as "set to missing".
+- Small-integer column validation instead of IQR capping (e.g. `quantity < 1` → flagged as invalid).
+- IQR outlier capping with non-negative lower bounds for revenue, quantity, and unit_price; profit may remain negative.
+- Outlier capping percentage shown in audit log; columns where capping exceeds 5 % of rows are flagged.
+- Missing-value imputation using median for numeric columns and mode for categoricals; median fill for `age` runs **after** negative values are set to missing.
+- "🧹 Cleaning Engine" Streamlit tab: configuration toggles, before/after impact comparison cards, 20-row preview, CSV export, and full audit log table.
+- 45-test suite in `tests/test_cleaning.py` (100 % pass rate) covering all cleaning steps, edge cases, and reconciliation checks.
 
 ## [0.1.0] - 2026-10-18
 ### Added
