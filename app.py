@@ -246,7 +246,7 @@ def format_audit_details(step: str, details: Any) -> str:
         thresh = details.get("threshold_date", "")
         thresh_str = f" [fence > {thresh}]" if thresh else ""
         if act == "nullify":
-            return f"{flagged} future dates flagged and set to NaT{thresh_str}"
+            return f"{flagged} future dates flagged and set to missing (NaT){thresh_str}"
         elif act == "cap":
             cap_lim = details.get("cap_target", "")
             return f"{flagged} future dates flagged and capped at {cap_lim}"
@@ -741,7 +741,7 @@ if df_loaded is not None and ingestion_meta is not None:
                 )
             with m_col5:
                 future_action = st.selectbox(
-                    "Future Date Action", ["cap", "nullify", "flag"], index=0
+                    "Future Date Action", ["nullify", "cap", "flag"], index=0
                 )
 
             st.button("🔄 Re-run Cleaning Engine", help="Apply chosen rules and recalculate")

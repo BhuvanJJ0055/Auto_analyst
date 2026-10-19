@@ -273,6 +273,8 @@ def test_future_dates_capping_and_nullify() -> None:
     assert logs_null[0]["rows_affected"] == 1
     assert logs_null[0]["method"] == "flag_and_nullify"
     assert logs_null[0]["details"]["future_dates_flagged"] == 1
+    assert logs_null[0]["details"]["dates_set_to_missing"] == 1
+    assert "missing" in logs_null[0]["action"]
 
     # 2. Config override: cap at maximum valid date
     cleaned_df_cap, logs_cap = handle_future_dates(

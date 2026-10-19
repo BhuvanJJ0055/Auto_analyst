@@ -390,10 +390,14 @@ def handle_future_dates(
                         "column": col,
                         "method": "flag_and_nullify",
                         "rows_affected": future_count,
-                        "action": f"Flagged {future_count} future dates in '{col}' and set to NaT",
+                        "action": (
+                            f"Flagged {future_count} future dates in '{col}' "
+                            f"and set to missing (NaT)"
+                        ),
                         "details": {
                             "future_dates_flagged": future_count,
                             "future_dates_count": future_count,
+                            "dates_set_to_missing": future_count,
                             "action": "nullify",
                             "threshold_date": threshold_date.strftime("%Y-%m-%d"),
                         },
