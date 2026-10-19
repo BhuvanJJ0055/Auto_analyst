@@ -41,6 +41,42 @@ def _apply_theme(fig: go.Figure) -> go.Figure:
     return fig
 
 
+def describe_distribution(skew: float, kurt: float) -> tuple:
+    """Return human-readable (skewness_label, kurtosis_label) from raw stats.
+
+    Skewness bands
+    --------------
+    |skew| < 0.5          → 'approximately symmetric'
+    0.5 ≤ |skew| ≤ 1.0   → 'moderately right/left-skewed'
+    |skew| > 1.0          → 'highly right/left-skewed'
+
+    Kurtosis bands (excess kurtosis)
+    ---------------------------------
+    kurt < -1  → 'flat (platykurtic)'
+    kurt > 1   → 'heavy-tailed (leptokurtic)'
+    otherwise  → 'normal-tailed (mesokurtic)'
+    """
+    abs_skew = abs(skew)
+
+    if abs_skew < 0.5:
+        skew_label = "approximately symmetric"
+    elif abs_skew <= 1.0:
+        direction = "right" if skew > 0 else "left"
+        skew_label = f"moderately {direction}-skewed"
+    else:
+        direction = "right" if skew > 0 else "left"
+        skew_label = f"highly {direction}-skewed"
+
+    if kurt < -1.0:
+        kurt_label = "flat (platykurtic)"
+    elif kurt > 1.0:
+        kurt_label = "heavy-tailed (leptokurtic)"
+    else:
+        kurt_label = "normal-tailed (mesokurtic)"
+
+    return skew_label, kurt_label
+
+
 def create_histogram(
     series: pd.Series, col_name: str, num_stats: Dict[str, Any]
 ) -> Dict[str, Any]:
@@ -80,25 +116,21 @@ def create_histogram(
     _apply_theme(fig)
 
     # Generate one-line plain-English caption from stats
-    skew = num_stats.get("skewness", 0.0)
-    kurt = num_stats.get("kurtosis", 0.0)
+    skew = num_stats.get("skewness", 0.0) or 0.0
+    kurt = num_stats.get("kurtosis", 0.0) or 0.0
     is_norm = num_stats.get("is_normal", False)
 
     if is_norm:
         shape_desc = "follows a normal distribution"
-    elif skew > 1.0:
-        shape_desc = "is strongly right-skewed with high-value tail"
-    elif skew > 0.3:
-        shape_desc = "is moderately right-skewed"
-    elif skew < -1.0:
-        shape_desc = "is strongly left-skewed"
-    elif skew < -0.3:
-        shape_desc = "is moderately left-skewed"
+        kurt_desc = ""
     else:
-        shape_desc = "is approximately symmetric"
+        skew_label, kurt_label = describe_distribution(skew, kurt)
+        shape_desc = f"is {skew_label}"
+        kurt_desc = f"; tail shape is {kurt_label}"
 
     caption = (
-        f"{clean_title} {shape_desc} (skewness = {skew:.2f}, kurtosis = {kurt:.2f}) "
+        f"{clean_title} {shape_desc}{kurt_desc} "
+        f"(skewness = {skew:.2f}, kurtosis = {kurt:.2f}) "
         f"with a median of {med:,.2f}."
     )
 

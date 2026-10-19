@@ -131,3 +131,148 @@ def test_visualization_on_tiny_dataset_does_not_crash() -> None:
     for c in charts:
         assert c["fig"] is not None
         assert len(c["caption"]) > 0
+
+
+# ---------------------------------------------------------------------------
+# describe_distribution – skewness and kurtosis band tests
+# ---------------------------------------------------------------------------
+from modules.visualization import describe_distribution  # noqa: E402
+
+
+class TestDescribeDistributionSkewnessBands:
+    """Each band must map to the correct human-readable label."""
+
+    def test_near_zero_skew_is_approximately_symmetric(self):
+        """skew = -0.03 (e.g. age column) must NOT be labelled 'skewed'."""
+        label, _ = describe_distribution(-0.03, 0.0)
+        assert label == "approximately symmetric", f"Got: {label}"
+
+    def test_zero_skew_is_approximately_symmetric(self):
+        label, _ = describe_distribution(0.0, 0.0)
+        assert label == "approximately symmetric"
+
+    def test_skew_just_below_threshold_right(self):
+        """0.49 is still in the symmetric band."""
+        label, _ = describe_distribution(0.49, 0.0)
+        assert label == "approximately symmetric"
+
+    def test_skew_just_below_threshold_left(self):
+        label, _ = describe_distribution(-0.49, 0.0)
+        assert label == "approximately symmetric"
+
+    def test_skew_at_threshold_right_is_moderately_skewed(self):
+        """Exactly 0.5 enters moderately-skewed band."""
+        label, _ = describe_distribution(0.5, 0.0)
+        assert label == "moderately right-skewed"
+
+    def test_skew_at_threshold_left_is_moderately_skewed(self):
+        label, _ = describe_distribution(-0.5, 0.0)
+        assert label == "moderately left-skewed"
+
+    def test_skew_inside_moderate_right_band(self):
+        label, _ = describe_distribution(0.75, 0.0)
+        assert label == "moderately right-skewed"
+
+    def test_skew_inside_moderate_left_band(self):
+        label, _ = describe_distribution(-0.75, 0.0)
+        assert label == "moderately left-skewed"
+
+    def test_skew_at_upper_moderate_boundary_right(self):
+        """Exactly 1.0 is still in moderately-skewed band."""
+        label, _ = describe_distribution(1.0, 0.0)
+        assert label == "moderately right-skewed"
+
+    def test_skew_at_upper_moderate_boundary_left(self):
+        label, _ = describe_distribution(-1.0, 0.0)
+        assert label == "moderately left-skewed"
+
+    def test_skew_above_one_is_highly_right_skewed(self):
+        """1.01 crosses into highly-skewed band."""
+        label, _ = describe_distribution(1.01, 0.0)
+        assert label == "highly right-skewed"
+
+    def test_skew_above_one_is_highly_left_skewed(self):
+        label, _ = describe_distribution(-1.01, 0.0)
+        assert label == "highly left-skewed"
+
+    def test_large_positive_skew(self):
+        label, _ = describe_distribution(3.5, 0.0)
+        assert label == "highly right-skewed"
+
+    def test_large_negative_skew(self):
+        label, _ = describe_distribution(-2.8, 0.0)
+        assert label == "highly left-skewed"
+
+
+class TestDescribeDistributionKurtosisBands:
+    """Each kurtosis band must map to the correct human-readable label."""
+
+    def test_kurt_below_minus_one_is_flat(self):
+        """kurt = -1.5 → flat (platykurtic)."""
+        _, label = describe_distribution(0.0, -1.5)
+        assert label == "flat (platykurtic)"
+
+    def test_kurt_at_minus_one_is_flat(self):
+        """kurt = exactly -1 → flat."""
+        _, label = describe_distribution(0.0, -1.0)
+        # -1.0 is NOT < -1.0, so it falls in normal-tailed
+        assert label == "normal-tailed (mesokurtic)"
+
+    def test_kurt_just_above_minus_one_is_normal_tailed(self):
+        _, label = describe_distribution(0.0, -0.99)
+        assert label == "normal-tailed (mesokurtic)"
+
+    def test_kurt_at_zero_is_normal_tailed(self):
+        _, label = describe_distribution(0.0, 0.0)
+        assert label == "normal-tailed (mesokurtic)"
+
+    def test_kurt_at_one_is_normal_tailed(self):
+        """kurt = exactly 1 is NOT > 1, so still normal-tailed."""
+        _, label = describe_distribution(0.0, 1.0)
+        assert label == "normal-tailed (mesokurtic)"
+
+    def test_kurt_just_above_one_is_heavy_tailed(self):
+        _, label = describe_distribution(0.0, 1.01)
+        assert label == "heavy-tailed (leptokurtic)"
+
+    def test_kurt_large_positive_is_heavy_tailed(self):
+        _, label = describe_distribution(0.0, 5.0)
+        assert label == "heavy-tailed (leptokurtic)"
+
+
+class TestHistogramCaptionUsesCorrectBands:
+    """Integration: histogram caption must reflect the correct band labels."""
+
+    def test_symmetric_column_caption_says_approximately_symmetric(self):
+        """A nearly-flat distribution should produce 'approximately symmetric' in caption."""
+        import numpy as np
+        from modules.visualization import create_histogram
+
+        rng = np.random.default_rng(42)
+        data = pd.Series(rng.uniform(0, 100, 500))
+        num_stats = {
+            "skewness": float(data.skew()),
+            "kurtosis": float(data.kurtosis()),
+            "median": float(data.median()),
+            "is_normal": False,
+        }
+        result = create_histogram(data, "test_col", num_stats)
+        caption = result["caption"].lower()
+        assert "approximately symmetric" in caption or "moderately" in caption or "highly" in caption
+
+    def test_age_skew_minus_003_produces_symmetric_caption(self):
+        """Confirm age-like skewness (-0.03) yields 'approximately symmetric' in caption."""
+        from modules.visualization import create_histogram
+
+        data = pd.Series([25, 30, 35, 40, 45, 28, 33, 38, 42, 29])
+        num_stats = {
+            "skewness": -0.03,
+            "kurtosis": 0.1,
+            "median": 34.0,
+            "is_normal": False,
+        }
+        result = create_histogram(data, "age", num_stats)
+        caption = result["caption"].lower()
+        assert "approximately symmetric" in caption, f"Expected 'approximately symmetric', got: {caption}"
+        assert "skewed" not in caption, f"Caption should not say 'skewed' for age: {caption}"
+
