@@ -479,7 +479,10 @@ def standardize_text(
             cleaned_series = cleaned_series.apply(
                 lambda x: GENDER_SYNONYMS.get(x.lower(), x.title())
             )
-        # 3. Region and general categoricals: standardize to Title Case
+        # 3. Constant columns: do not title-case constant codes / single-value columns
+        elif sem_type == "constant" or orig_unique <= 1 or cleaned_series.nunique() <= 1:
+            pass
+        # 4. Region and general categoricals: standardize to Title Case
         else:
             cleaned_series = cleaned_series.str.title()
 
@@ -493,12 +496,18 @@ def standardize_text(
 
         new_unique = int(cleaned_df[col].dropna().nunique())
 
+        method_name = (
+            "whitespace_trim"
+            if (sem_type == "constant" or orig_unique <= 1 or cleaned_series.nunique() <= 1)
+            else "title_case_and_synonyms"
+        )
+
         logs.append(
             {
                 "timestamp": datetime.now().isoformat(),
                 "step": "standardize_text",
                 "column": col,
-                "method": "title_case_and_synonyms",
+                "method": method_name,
                 "rows_affected": cells_changed,
                 "action": (
                     f"Standardized '{col}': {orig_unique} variants "

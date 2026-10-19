@@ -511,3 +511,44 @@ def test_rows_affected_matches_actual_changed_cells_outlier_capping() -> None:
         actual_diff = int((df_stage[col] != df_cleaned_outliers[col]).sum())
         assert o_log["rows_affected"] == actual_diff
         assert o_log["details"]["outliers_treated"] == actual_diff
+
+
+def test_standardize_constant_column_reports_zero_changed_cells() -> None:
+    """Verify standardizing a constant column reports 0 changed cells, not row count."""
+    # 1. Synthetic constant column with identical values
+    df_const = pd.DataFrame(
+        {
+            "store_code": ["RETAIL-CORP-HQ"] * 50,
+        }
+    )
+    cleaned_df, logs = standardize_text(df_const)
+    assert len(logs) == 1
+    assert logs[0]["rows_affected"] == 0
+    assert logs[0]["details"]["cells_changed"] == 0
+    assert (cleaned_df["store_code"] == "RETAIL-CORP-HQ").all()
+
+    # 2. Synthetic constant column with whitespace on a subset of rows
+    df_ws = pd.DataFrame(
+        {
+            "store_code": ["STORE-1", " STORE-1 ", "STORE-1", "STORE-1 "],
+        }
+    )
+    cleaned_ws, logs_ws = standardize_text(df_ws)
+    assert len(logs_ws) == 1
+    # Only 2 rows actually differed due to whitespace
+    assert logs_ws[0]["rows_affected"] == 2
+    assert logs_ws[0]["details"]["cells_changed"] == 2
+    assert (cleaned_ws["store_code"] == "STORE-1").all()
+
+    # 3. Benchmark messy_sales.csv store_code: 4,860 rows after dedup must report 0 changed
+    messy_path = SAMPLE_DATA_DIR / "messy_sales.csv"
+    df_messy, _ = load_file(messy_path)
+    cleaned_messy, full_logs = clean_data(df_messy)
+    store_code_std_log = next(
+        log
+        for log in full_logs
+        if log["step"] == "standardize_text" and log["column"] == "store_code"
+    )
+    assert store_code_std_log["rows_affected"] == 0
+    assert store_code_std_log["details"]["cells_changed"] == 0
+    assert (cleaned_messy["store_code"] == "RETAIL-CORP-HQ").all()
