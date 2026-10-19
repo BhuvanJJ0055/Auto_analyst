@@ -588,3 +588,46 @@ def test_outliers_capping_percent_and_flag_exceeding_threshold() -> None:
     assert high_log["details"]["flagged_exceeds_5pct"] is True
     assert "10.0%" in high_log["action"]
     assert "[FLAGGED: >5% capped]" in high_log["action"]
+
+
+def test_cleaned_order_date_never_contains_future_dates_and_no_fabricated_defaults() -> None:
+    """Verify cleaned order_date never contains future dates and sets them to NaT."""
+    # 1. Benchmark messy_sales.csv case: verify all 35 future dates are set to NaT, not fabricated
+    messy_path = SAMPLE_DATA_DIR / "messy_sales.csv"
+    df_messy, _ = load_file(messy_path)
+    cleaned_df, logs = clean_data(df_messy)
+
+    now = pd.Timestamp.now()
+    valid_dates = cleaned_df["order_date"].dropna()
+
+    # Never contains any date after today
+    assert (valid_dates <= now).all(), "Cleaned order_date contains dates occurring after today"
+
+    # Future dates are set to NaT (missing) rather than capped to an invented date.
+    # With nullification, all 35 future dates become NaT, and legitimate 2024-12-31 orders
+    # remain untouched at exactly 5 (rather than swelling to 40 via fabricated capping).
+    assert cleaned_df["order_date"].isna().sum() == 35, "Expected 35 nullified future date entries"
+    assert int((cleaned_df["order_date"] == pd.Timestamp("2024-12-31")).sum()) == 5
+
+    future_logs = [log for log in logs if log["step"] == "handle_future_dates"]
+    assert len(future_logs) == 1
+    f_log = future_logs[0]
+    assert f_log["method"] == "flag_and_nullify"
+    assert f_log["rows_affected"] == 35
+    assert f_log["details"]["dates_set_to_missing"] == 35
+    assert f_log["details"]["action"] == "nullify"
+    assert "missing" in f_log["action"]
+
+    # 2. Synthetic dataset: verify no fabricated capping date is introduced by default
+    df_syn = pd.DataFrame(
+        {
+            "order_date": ["2023-01-15", "2023-06-20", "2099-01-01", "2099-12-31"],
+        }
+    )
+    cleaned_syn, syn_logs = clean_data(df_syn)
+    assert (cleaned_syn["order_date"].dropna() <= now).all()
+    assert cleaned_syn["order_date"].isna().sum() == 2
+    # The historical max "2023-06-20" was NOT fabricated onto future orders
+    assert int((cleaned_syn["order_date"] == pd.Timestamp("2023-06-20")).sum()) == 1
+    assert pd.isna(cleaned_syn["order_date"].iloc[2])
+    assert pd.isna(cleaned_syn["order_date"].iloc[3])
