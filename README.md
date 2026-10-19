@@ -2,7 +2,7 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-45%20passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-62%20passed-brightgreen.svg)](tests/)
 [![Version](https://img.shields.io/badge/version-v0.2.0-blue.svg)](CHANGELOG.md)
 
 > Turn raw datasets into publication-ready dashboards, statistical audits, and plain-English business insights in seconds — with zero coding required.
@@ -44,6 +44,21 @@ AutoAnalyst is a local, privacy-first automated data analyst built with Python a
 | Missing Cells | ~6,500 | 35 (future-date NaTs) |
 | Region Variants | 16 | 4 canonical |
 | Gender Variants | 8 | 2 canonical |
+
+---
+
+## 📈 Automated Exploratory Data Analysis & Visualization Gallery
+
+> Comprehensive univariate statistics, bivariate hypothesis testing, and time-series trend and seasonality decomposition. Every visualization features computed statistical captions, explicit axes, and high-contrast dark theme styling.
+
+### 1. Feature Distributions & Statistical Summary
+![Feature Distributions](docs/eda_feature_distributions.png)
+
+### 2. Correlation Matrix & Scatter Relationships
+![Correlations & Relationships](docs/eda_correlations.png)
+
+### 3. Time-Series Trends & Seasonality Decomposition
+![Time-Series & Trends](docs/eda_timeseries.png)
 
 ---
 
