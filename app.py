@@ -1041,10 +1041,18 @@ if df_loaded is not None and ingestion_meta is not None:
 
                 c1, c2 = st.columns(2)
                 with c1:
-                    st.plotly_chart(h_chart["fig"], use_container_width=True)
+                    st.plotly_chart(
+                        h_chart["fig"],
+                        use_container_width=True,
+                        key=f"eda_dist_hist_{selected_num}",
+                    )
                     st.caption(f"💡 {h_chart['caption']}")
                 with c2:
-                    st.plotly_chart(b_chart["fig"], use_container_width=True)
+                    st.plotly_chart(
+                        b_chart["fig"],
+                        use_container_width=True,
+                        key=f"eda_dist_box_{selected_num}",
+                    )
                     st.caption(f"💡 {b_chart['caption']}")
 
             if cat_cols:
@@ -1052,7 +1060,11 @@ if df_loaded is not None and ingestion_meta is not None:
                 selected_cat = st.selectbox("Select Categorical Feature to Inspect:", cat_cols, index=0)
                 c_stats = eda_results["univariate_categorical"].get(selected_cat, {})
                 c_chart = create_categorical_bar(target_eda_df[selected_cat], selected_cat, c_stats)
-                st.plotly_chart(c_chart["fig"], use_container_width=True)
+                st.plotly_chart(
+                    c_chart["fig"],
+                    use_container_width=True,
+                    key=f"eda_dist_bar_{selected_cat}",
+                )
                 st.caption(f"💡 {c_chart['caption']}")
 
         with eda_sub_corr:
@@ -1060,7 +1072,11 @@ if df_loaded is not None and ingestion_meta is not None:
             if len(num_cols) >= 2:
                 h_map = create_correlation_heatmap(eda_results["correlations"])
                 if h_map is not None:
-                    st.plotly_chart(h_map["fig"], use_container_width=True)
+                    st.plotly_chart(
+                        h_map["fig"],
+                        use_container_width=True,
+                        key="eda_corr_heatmap",
+                    )
                     st.caption(f"💡 {h_map['caption']}")
 
                 pairs = eda_results["correlations"].get("pairs", [])
@@ -1076,14 +1092,22 @@ if df_loaded is not None and ingestion_meta is not None:
                     scatter_c = create_scatter_plot(
                         target_eda_df, chosen_pair["col1"], chosen_pair["col2"], chosen_pair
                     )
-                    st.plotly_chart(scatter_c["fig"], use_container_width=True)
+                    st.plotly_chart(
+                        scatter_c["fig"],
+                        use_container_width=True,
+                        key=f"eda_scatter_{chosen_pair['col1']}_{chosen_pair['col2']}",
+                    )
                     st.caption(f"💡 {scatter_c['caption']}")
 
             if eda_results.get("group_comparisons"):
                 st.markdown("##### Categorical vs. Numerical Group Differences (ANOVA)")
-                for comp in eda_results["group_comparisons"][:2]:
+                for comp_idx, comp in enumerate(eda_results["group_comparisons"][:2]):
                     g_chart = create_grouped_bar(comp)
-                    st.plotly_chart(g_chart["fig"], use_container_width=True)
+                    st.plotly_chart(
+                        g_chart["fig"],
+                        use_container_width=True,
+                        key=f"eda_group_{comp['cat_col']}_{comp['num_col']}_{comp_idx}",
+                    )
                     st.caption(f"💡 {g_chart['caption']}")
 
         with eda_sub_ts:
@@ -1101,7 +1125,11 @@ if df_loaded is not None and ingestion_meta is not None:
 
                 ts_chart = create_timeseries_chart(ts_res)
                 if ts_chart is not None:
-                    st.plotly_chart(ts_chart["fig"], use_container_width=True)
+                    st.plotly_chart(
+                        ts_chart["fig"],
+                        use_container_width=True,
+                        key=f"eda_ts_{dt_col}_{selected_ts_metric}",
+                    )
                     st.caption(f"💡 {ts_chart['caption']}")
             else:
                 st.info("No datetime column detected in this dataset. Time-series analysis requires a chronological timestamp column.")
@@ -1110,7 +1138,11 @@ if df_loaded is not None and ingestion_meta is not None:
             st.markdown(f"#### Complete Automated Chart Gallery ({len(all_charts)} Charts Generated)")
             for idx, c in enumerate(all_charts):
                 with st.expander(f"Chart #{idx + 1}: {c['title']} ({c['chart_type'].title()})", expanded=(idx < 2)):
-                    st.plotly_chart(c["fig"], use_container_width=True)
+                    st.plotly_chart(
+                        c["fig"],
+                        use_container_width=True,
+                        key=f"eda_gallery_{c['id']}_{idx}",
+                    )
                     st.caption(f"💡 {c['caption']}")
 
     with tab_specs:
