@@ -276,3 +276,133 @@ class TestHistogramCaptionUsesCorrectBands:
         assert "approximately symmetric" in caption, f"Expected 'approximately symmetric', got: {caption}"
         assert "skewed" not in caption, f"Caption should not say 'skewed' for age: {caption}"
 
+
+# ---------------------------------------------------------------------------
+# _adaptive_bins – bin count range tests
+# ---------------------------------------------------------------------------
+from modules.visualization import _adaptive_bins  # noqa: E402
+
+
+class TestAdaptiveBins:
+    """Bin count must always sit in [5, 60] and respect integer-column rules."""
+
+    def test_every_numeric_column_in_clean_sales_has_sensible_bin_count(self):
+        """Each numeric column in clean_sales.csv must yield 5–60 bins."""
+        clean_path = SAMPLE_DATA_DIR / "clean_sales.csv"
+        df, _ = load_file(clean_path)
+
+        num_cols = df.select_dtypes(include="number").columns.tolist()
+        assert len(num_cols) > 0, "Expected at least one numeric column in clean_sales.csv"
+
+        for col in num_cols:
+            bins = _adaptive_bins(df[col])
+            assert 5 <= bins <= 60, (
+                f"Column '{col}': bin count {bins} is outside [5, 60]"
+            )
+
+    def test_integer_column_bin_width_is_at_least_one(self):
+        """Integer series must not produce bins narrower than 1 (no gap bars)."""
+        # quantity: 1-10 range → bin width = range/bins should be >= 1
+        data = pd.Series(list(range(1, 11)) * 100)  # integers 1-10, 1000 points
+        bins = _adaptive_bins(data)
+        data_range = data.max() - data.min()  # 9
+        bin_width = data_range / bins
+        assert bin_width >= 1.0, (
+            f"Integer column bin width {bin_width:.3f} < 1 (bins={bins}, range={data_range})"
+        )
+
+    def test_float_column_produces_bins_in_range(self):
+        """Continuous float column with clear spread should use FD rule and stay in [5,60]."""
+        import numpy as _np
+        rng = _np.random.default_rng(0)
+        data = pd.Series(rng.normal(500, 80, 1000))
+        bins = _adaptive_bins(data)
+        assert 5 <= bins <= 60
+
+    def test_tiny_series_falls_back_to_sturges_minimum(self):
+        """With only 5 values Sturges = ceil(log2(5))+1 = 4, clamped to 5."""
+        data = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
+        bins = _adaptive_bins(data)
+        assert bins == 5
+
+    def test_constant_series_returns_minimum_bins(self):
+        """All-same values: range=0, must not crash and must return 5."""
+        data = pd.Series([42.0] * 100)
+        bins = _adaptive_bins(data)
+        assert bins == 5
+
+    def test_large_integer_range_is_capped_at_60(self):
+        """1-to-500 integers: FD would give many bins, must cap at 60."""
+        data = pd.Series(list(range(1, 501)))
+        bins = _adaptive_bins(data)
+        assert bins <= 60
+
+    def test_messy_sales_numeric_columns_all_in_range(self):
+        """Numeric columns in cleaned messy_sales.csv also stay in [5, 60]."""
+        messy_path = SAMPLE_DATA_DIR / "messy_sales.csv"
+        df_messy, _ = load_file(messy_path)
+        from modules.cleaning import clean_data
+        df_clean, _ = clean_data(df_messy)
+
+        num_cols = df_clean.select_dtypes(include="number").columns.tolist()
+        for col in num_cols:
+            bins = _adaptive_bins(df_clean[col])
+            assert 5 <= bins <= 60, (
+                f"Cleaned messy_sales column '{col}': bin count {bins} outside [5, 60]"
+            )
+
+
+# ---------------------------------------------------------------------------
+# describe_distribution_short – short card label tests
+# ---------------------------------------------------------------------------
+from modules.visualization import describe_distribution_short  # noqa: E402
+
+
+class TestDescribeDistributionShort:
+    """Short labels must be concise and not truncate in a narrow metric card."""
+
+    def test_symmetric_returns_Symmetric(self):
+        label, _ = describe_distribution_short(0.04, -1.01)
+        assert label == "Symmetric"
+
+    def test_moderate_skew_returns_Moderately_skewed(self):
+        label, _ = describe_distribution_short(0.75, 0.0)
+        assert label == "Moderately skewed"
+
+    def test_high_skew_returns_Highly_skewed(self):
+        label, _ = describe_distribution_short(2.3, 0.0)
+        assert label == "Highly skewed"
+
+    def test_normal_flag_returns_Normal(self):
+        label, klabel = describe_distribution_short(0.1, 0.1, is_normal=True)
+        assert label == "Normal"
+        assert klabel == "Normal tail"
+
+    def test_flat_tail_kurt(self):
+        _, klabel = describe_distribution_short(0.0, -1.5)
+        assert klabel == "Flat tail"
+
+    def test_heavy_tail_kurt(self):
+        _, klabel = describe_distribution_short(0.0, 2.0)
+        assert klabel == "Heavy tail"
+
+    def test_normal_tail_kurt(self):
+        _, klabel = describe_distribution_short(0.0, 0.5)
+        assert klabel == "Normal tail"
+
+    def test_all_labels_fit_in_20_chars(self):
+        """No label should be long enough to truncate in a typical Streamlit metric card."""
+        test_cases = [
+            (0.04, -1.01, False),
+            (0.75, 0.0, False),
+            (2.3, 0.0, False),
+            (0.1, 0.1, True),
+            (-0.8, -1.5, False),
+            (-2.0, 2.0, False),
+        ]
+        for skew, kurt, norm in test_cases:
+            sl, kl = describe_distribution_short(skew, kurt, norm)
+            assert len(sl) <= 20, f"Skew label too long: '{sl}'"
+            assert len(kl) <= 20, f"Kurt label too long: '{kl}'"
+
+
