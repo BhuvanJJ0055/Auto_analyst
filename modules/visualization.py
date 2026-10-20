@@ -34,6 +34,15 @@ PLOTLY_DARK_LAYOUT = {
     "margin": {"l": 50, "r": 30, "t": 60, "b": 50},
 }
 
+PLOTLY_CONFIG = {
+    "toImageButtonOptions": {
+        "format": "png",
+        "scale": 2,  # Crisp 2x publication resolution
+    },
+    "displayModeBar": True,
+    "displaylogo": False,
+}
+
 
 def _apply_theme(fig: go.Figure) -> go.Figure:
     """Apply consistent high-contrast dark theme styling to a Plotly figure."""
@@ -635,6 +644,76 @@ def create_timeseries_chart(
     }
 
 
+def create_pca_chart(
+    pca_res: Dict[str, Any],
+    hue_series: Optional[pd.Series] = None,
+    hue_name: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Generate 2D Principal Component Analysis projection scatter plot."""
+    if pca_res is None or "projections" not in pca_res:
+        return None
+
+    projections = pca_res["projections"]
+    if "PC1" not in projections.columns or "PC2" not in projections.columns:
+        return None
+
+    ev = pca_res.get("explained_variance_ratio", [0.0, 0.0])
+    pc1_pct = ev[0] * 100 if len(ev) > 0 else 0.0
+    pc2_pct = ev[1] * 100 if len(ev) > 1 else 0.0
+    total_ev = pca_res.get("total_explained_variance", 0.0) * 100
+
+    plot_df = projections[["PC1", "PC2"]].copy()
+    if hue_series is not None:
+        plot_df["Category"] = hue_series.loc[plot_df.index].astype(str)
+
+    fig = go.Figure()
+    if hue_series is not None and "Category" in plot_df.columns:
+        for cat, grp in plot_df.groupby("Category"):
+            fig.add_trace(
+                go.Scatter(
+                    x=grp["PC1"],
+                    y=grp["PC2"],
+                    mode="markers",
+                    name=str(cat),
+                    marker={"size": 6, "opacity": 0.75},
+                )
+            )
+    else:
+        fig.add_trace(
+            go.Scatter(
+                x=plot_df["PC1"],
+                y=plot_df["PC2"],
+                mode="markers",
+                name="Observations",
+                marker={"color": "#58A6FF", "size": 6, "opacity": 0.75},
+            )
+        )
+
+    legend_title = hue_name.replace("_", " ").title() if hue_name else "Category"
+    fig.update_layout(
+        title="2D PCA Dimensionality Reduction",
+        xaxis_title=f"Principal Component 1 ({pc1_pct:.1f}% Variance)",
+        yaxis_title=f"Principal Component 2 ({pc2_pct:.1f}% Variance)",
+        showlegend=(hue_series is not None),
+        legend={"title": legend_title} if hue_series is not None else {},
+    )
+    _apply_theme(fig)
+
+    caption = (
+        f"2D PCA captures {total_ev:.1f}% of cumulative variance across {len(pca_res['columns'])} "
+        f"numerical features (PC1: {pc1_pct:.1f}%, PC2: {pc2_pct:.1f}%)."
+    )
+
+    return {
+        "id": "pca_2d",
+        "title": "2D PCA Dimensionality Reduction",
+        "chart_type": "scatter",
+        "fig": fig,
+        "caption": caption,
+        "columns": pca_res["columns"],
+    }
+
+
 def generate_visualizations(
     df_clean: pd.DataFrame,
     eda_results: Optional[Dict[str, Any]] = None,
@@ -702,5 +781,13 @@ def generate_visualizations(
         ts_chart = create_timeseries_chart(ts)
         if ts_chart is not None:
             charts.append(ts_chart)
+
+    # 6. PCA 2D Dimensionality Reduction (if >= 2 numeric features)
+    if eda_results.get("pca") is not None:
+        hue_s = df_clean[cat_cols[0]] if cat_cols else None
+        hue_n = cat_cols[0] if cat_cols else None
+        pca_chart = create_pca_chart(eda_results["pca"], hue_series=hue_s, hue_name=hue_n)
+        if pca_chart is not None:
+            charts.append(pca_chart)
 
     return charts

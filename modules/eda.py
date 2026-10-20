@@ -587,6 +587,14 @@ def run_eda(df_clean: pd.DataFrame, target: Optional[str] = None) -> Dict[str, A
             ts_res = compute_timeseries_analysis(df_clean, primary_dt, n_col)
             timeseries_results.append(ts_res)
 
+    # 6. Optional PCA Dimensionality Reduction
+    pca_results = compute_pca(df_clean, numeric_cols)
+
+    # 7. Optional Target Analysis
+    target_results = None
+    if target and target in df_clean.columns:
+        target_results = compute_target_analysis(df_clean, target, classified)
+
     return {
         "classified_columns": classified,
         "excluded_columns": excluded,
@@ -597,5 +605,110 @@ def run_eda(df_clean: pd.DataFrame, target: Optional[str] = None) -> Dict[str, A
         "group_comparisons": group_comparisons,
         "categorical_associations": cat_associations,
         "timeseries_analysis": timeseries_results,
+        "pca": pca_results,
         "target": target,
+        "target_analysis": target_results,
     }
+
+
+def compute_pca(
+    df: pd.DataFrame, numeric_cols: List[str], n_components: int = 2
+) -> Optional[Dict[str, Any]]:
+    """Compute Principal Component Analysis on standardized numeric features.
+
+    Returns explained variance ratios, loadings table, and 2D projections.
+    """
+    if len(numeric_cols) < 2:
+        return None
+
+    valid = df[numeric_cols].apply(pd.to_numeric, errors="coerce").dropna()
+    if len(valid) < 5:
+        return None
+
+    # Standardize features (Z-scores)
+    means = valid.mean()
+    stds = valid.std().replace(0, 1.0)
+    scaled = (valid - means) / stds
+
+    try:
+        from sklearn.decomposition import PCA
+
+        n_comp = min(n_components, len(numeric_cols), len(valid))
+        pca = PCA(n_components=n_comp)
+        transformed = pca.fit_transform(scaled)
+
+        loadings = pd.DataFrame(
+            pca.components_.T,
+            index=numeric_cols,
+            columns=[f"PC{i+1}" for i in range(n_comp)],
+        )
+
+        return {
+            "n_components": n_comp,
+            "explained_variance_ratio": [float(r) for r in pca.explained_variance_ratio_],
+            "total_explained_variance": float(np.sum(pca.explained_variance_ratio_)),
+            "loadings": loadings,
+            "projections": pd.DataFrame(
+                transformed,
+                columns=[f"PC{i+1}" for i in range(n_comp)],
+                index=valid.index,
+            ),
+            "columns": numeric_cols,
+        }
+    except Exception:
+        return None
+
+
+def compute_target_analysis(
+    df: pd.DataFrame, target_col: str, classified: Dict[str, List[str]]
+) -> Dict[str, Any]:
+    """Perform supervised bivariate profiling against a designated target column."""
+    numeric_cols = [c for c in classified.get("numeric", []) if c != target_col]
+    cat_cols = [c for c in classified.get("categorical", []) if c != target_col]
+
+    is_numeric_target = target_col in classified.get("numeric", [])
+
+    if is_numeric_target:
+        corrs = []
+        for n_col in numeric_cols:
+            valid = df[[target_col, n_col]].dropna()
+            if len(valid) >= 3:
+                r_val, p_val = stats.pearsonr(valid[target_col], valid[n_col])
+                corrs.append({
+                    "feature": n_col,
+                    "pearson_r": float(r_val) if not np.isnan(r_val) else 0.0,
+                    "pearson_p": float(p_val) if not np.isnan(p_val) else 1.0,
+                })
+        corrs.sort(key=lambda x: abs(x["pearson_r"]), reverse=True)
+
+        cat_diffs = []
+        for c_col in cat_cols:
+            comp = compute_group_comparisons(df, c_col, target_col)
+            if comp.get("anova_f") is not None:
+                cat_diffs.append(comp)
+
+        return {
+            "target_type": "numeric",
+            "target_col": target_col,
+            "correlations": corrs,
+            "category_differences": cat_diffs,
+        }
+    else:
+        num_diffs = []
+        for n_col in numeric_cols:
+            comp = compute_group_comparisons(df, target_col, n_col)
+            if comp.get("anova_f") is not None:
+                num_diffs.append(comp)
+
+        cat_assocs = []
+        for c_col in cat_cols:
+            assoc = compute_categorical_association(df, target_col, c_col)
+            if assoc.get("chi2") is not None:
+                cat_assocs.append(assoc)
+
+        return {
+            "target_type": "categorical",
+            "target_col": target_col,
+            "numeric_differences": num_diffs,
+            "categorical_associations": cat_assocs,
+        }

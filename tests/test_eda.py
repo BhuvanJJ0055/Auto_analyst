@@ -281,3 +281,34 @@ def test_eda_on_cleaned_messy_sales_excludes_store_code_and_order_id() -> None:
     pearson_cols = list(eda_res["correlations"]["pearson"].columns)
     assert "store_code" not in pearson_cols
     assert "order_id" not in pearson_cols
+
+
+def test_compute_pca_and_target_analysis() -> None:
+    """Verify compute_pca produces valid components and compute_target_analysis profiles target."""
+    from modules.eda import compute_pca, compute_target_analysis
+
+    clean_path = SAMPLE_DATA_DIR / "clean_sales.csv"
+    df, _ = load_file(clean_path)
+
+    # 1. PCA computation
+    pca_res = compute_pca(df, ["revenue", "profit", "unit_price", "quantity"])
+    assert pca_res is not None
+    assert pca_res["n_components"] == 2
+    assert len(pca_res["explained_variance_ratio"]) == 2
+    assert 0.0 < pca_res["total_explained_variance"] <= 1.0
+    assert "PC1" in pca_res["projections"].columns
+    assert "PC2" in pca_res["projections"].columns
+    assert len(pca_res["loadings"]) == 4
+
+    # 2. Target analysis with numeric target
+    classified = {"numeric": ["revenue", "profit", "unit_price"], "categorical": ["category", "region"]}
+    t_num = compute_target_analysis(df, "revenue", classified)
+    assert t_num["target_type"] == "numeric"
+    assert len(t_num["correlations"]) > 0
+    assert len(t_num["category_differences"]) > 0
+
+    # 3. Target analysis with categorical target
+    t_cat = compute_target_analysis(df, "category", classified)
+    assert t_cat["target_type"] == "categorical"
+    assert len(t_cat["numeric_differences"]) > 0
+

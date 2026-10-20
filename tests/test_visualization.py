@@ -468,4 +468,24 @@ class TestPValueAndCorrelationDescription:
         assert "very strong positive relationship" in s_chart["caption"]
 
 
+def test_create_pca_chart_generates_valid_plot_and_caption() -> None:
+    """Verify create_pca_chart generates valid 2D scatter figure with explained variance in title/caption."""
+    from modules.eda import compute_pca
+    from modules.visualization import create_pca_chart
+
+    clean_path = SAMPLE_DATA_DIR / "clean_sales.csv"
+    df, _ = load_file(clean_path)
+
+    pca_res = compute_pca(df, ["revenue", "profit", "unit_price", "quantity"])
+    assert pca_res is not None
+
+    chart = create_pca_chart(pca_res, hue_series=df["category"], hue_name="category")
+    assert chart is not None
+    assert chart["chart_type"] == "scatter"
+    assert "2D PCA" in chart["title"]
+    assert "variance" in chart["caption"].lower()
+    assert len(chart["fig"].data) > 0
+
+
+
 

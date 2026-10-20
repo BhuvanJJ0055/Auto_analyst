@@ -11,15 +11,22 @@ import pandas as pd
 import streamlit as st
 
 from modules.cleaning import clean_data
-from modules.eda import compute_timeseries_analysis, run_eda
+from modules.eda import (
+    compute_pca,
+    compute_target_analysis,
+    compute_timeseries_analysis,
+    run_eda,
+)
 from modules.ingestion import IngestionError, get_excel_sheet_names, load_file
 from modules.profiling import profile_data
 from modules.visualization import (
+    PLOTLY_CONFIG,
     create_boxplot,
     create_categorical_bar,
     create_correlation_heatmap,
     create_grouped_bar,
     create_histogram,
+    create_pca_chart,
     create_scatter_plot,
     create_timeseries_chart,
     describe_correlation,
@@ -1009,11 +1016,12 @@ if df_loaded is not None and ingestion_meta is not None:
 
         st.divider()
 
-        eda_sub_dist, eda_sub_corr, eda_sub_ts, eda_sub_gallery = st.tabs(
+        eda_sub_dist, eda_sub_corr, eda_sub_ts, eda_sub_advanced, eda_sub_gallery = st.tabs(
             [
                 "📊 Feature Distributions",
                 "🔗 Correlations & Relationships",
                 "📈 Time-Series & Trends",
+                "🎯 Advanced (Target & PCA)",
                 "🖼️ Full Visualizations Gallery",
             ]
         )
@@ -1056,6 +1064,7 @@ if df_loaded is not None and ingestion_meta is not None:
                     st.plotly_chart(
                         h_chart["fig"],
                         use_container_width=True,
+                        config=PLOTLY_CONFIG,
                         key=f"eda_dist_hist_{selected_num}",
                     )
                     st.caption(f"💡 {h_chart['caption']}")
@@ -1063,6 +1072,7 @@ if df_loaded is not None and ingestion_meta is not None:
                     st.plotly_chart(
                         b_chart["fig"],
                         use_container_width=True,
+                        config=PLOTLY_CONFIG,
                         key=f"eda_dist_box_{selected_num}",
                     )
                     st.caption(f"💡 {b_chart['caption']}")
@@ -1075,6 +1085,7 @@ if df_loaded is not None and ingestion_meta is not None:
                 st.plotly_chart(
                     c_chart["fig"],
                     use_container_width=True,
+                    config=PLOTLY_CONFIG,
                     key=f"eda_dist_bar_{selected_cat}",
                 )
                 st.caption(f"💡 {c_chart['caption']}")
@@ -1095,6 +1106,7 @@ if df_loaded is not None and ingestion_meta is not None:
                     st.plotly_chart(
                         h_map["fig"],
                         use_container_width=True,
+                        config=PLOTLY_CONFIG,
                         key="eda_corr_heatmap",
                     )
                     st.caption(f"💡 {h_map['caption']}")
@@ -1126,6 +1138,7 @@ if df_loaded is not None and ingestion_meta is not None:
                     st.plotly_chart(
                         scatter_c["fig"],
                         use_container_width=True,
+                        config=PLOTLY_CONFIG,
                         key=f"eda_scatter_{chosen_pair['col1']}_{chosen_pair['col2']}",
                     )
                     st.caption(f"💡 {scatter_c['caption']}")
@@ -1137,9 +1150,28 @@ if df_loaded is not None and ingestion_meta is not None:
                     st.plotly_chart(
                         g_chart["fig"],
                         use_container_width=True,
+                        config=PLOTLY_CONFIG,
                         key=f"eda_group_{comp['cat_col']}_{comp['num_col']}_{comp_idx}",
                     )
                     st.caption(f"💡 {g_chart['caption']}")
+
+            cat_assocs = eda_results.get("categorical_associations", [])
+            if cat_assocs:
+                st.markdown("##### Categorical Feature Associations (Chi-Square Independence Test)")
+                assoc_rows = []
+                for a in cat_assocs[:6]:
+                    cramers = a.get("cramers_v")
+                    c_str = f"{cramers:.3f}" if cramers is not None else "N/A"
+                    assoc_rows.append({
+                        "Feature 1": a["cat1"],
+                        "Feature 2": a["cat2"],
+                        "Chi-Square (χ²)": f"{a['chi2']:.2f}",
+                        "p-value": format_p_value(a["p_value"]),
+                        "Degrees of Freedom": a["dof"],
+                        "Cramér's V (Effect Size)": c_str,
+                        "Statistically Significant": "✓ Yes (p < 0.05)" if a["significant"] else "✗ No",
+                    })
+                st.dataframe(pd.DataFrame(assoc_rows), use_container_width=True, hide_index=True)
 
         with eda_sub_ts:
             st.markdown("#### Time-Series Decomposition & Seasonality")
@@ -1159,22 +1191,100 @@ if df_loaded is not None and ingestion_meta is not None:
                     st.plotly_chart(
                         ts_chart["fig"],
                         use_container_width=True,
+                        config=PLOTLY_CONFIG,
                         key=f"eda_ts_{dt_col}_{selected_ts_metric}",
                     )
                     st.caption(f"💡 {ts_chart['caption']}")
             else:
                 st.info("No datetime column detected in this dataset. Time-series analysis requires a chronological timestamp column.")
 
+        with eda_sub_advanced:
+            st.markdown("#### Supervised Target Profiling & PCA Dimensionality Reduction")
+
+            adv_col1, adv_col2 = st.columns([1, 1])
+
+            with adv_col1:
+                st.markdown("##### 🎯 Target Feature Analysis")
+                all_feature_options = num_cols + cat_cols
+                if all_feature_options:
+                    selected_target = st.selectbox(
+                        "Designate Target Variable for Profiling:",
+                        all_feature_options,
+                        index=0,
+                        key="eda_target_selector",
+                    )
+                    t_analysis = compute_target_analysis(target_eda_df, selected_target, classified)
+                    if t_analysis["target_type"] == "numeric":
+                        st.markdown(f"**Target `{selected_target}` (Numerical) Correlations:**")
+                        t_corrs = t_analysis.get("correlations", [])
+                        if t_corrs:
+                            t_corr_df = pd.DataFrame([
+                                {
+                                    "Feature": c["feature"],
+                                    "Pearson r": f"{c['pearson_r']:+.3f}",
+                                    "p-value": format_p_value(c["pearson_p"]),
+                                    "Relationship": describe_correlation(c["pearson_r"]).title(),
+                                }
+                                for c in t_corrs
+                            ])
+                            st.dataframe(t_corr_df, use_container_width=True, hide_index=True)
+                        t_cat_diffs = t_analysis.get("category_differences", [])
+                        if t_cat_diffs:
+                            st.markdown(f"**Variance Across Categories (ANOVA):**")
+                            for c_diff in t_cat_diffs[:2]:
+                                g_c = create_grouped_bar(c_diff)
+                                st.plotly_chart(g_c["fig"], use_container_width=True, config=PLOTLY_CONFIG)
+                    else:
+                        st.markdown(f"**Target `{selected_target}` (Categorical) Differences Across Features:**")
+                        num_diffs = t_analysis.get("numeric_differences", [])
+                        for n_diff in num_diffs[:2]:
+                            g_c = create_grouped_bar(n_diff)
+                            st.plotly_chart(g_c["fig"], use_container_width=True, config=PLOTLY_CONFIG)
+
+            with adv_col2:
+                st.markdown("##### 🔬 2D PCA Dimensionality Reduction")
+                pca_meta = eda_results.get("pca")
+                if pca_meta is not None:
+                    hue_col = st.selectbox(
+                        "Color PCA Points by Categorical Feature:",
+                        ["None"] + cat_cols,
+                        index=1 if cat_cols else 0,
+                        key="eda_pca_hue",
+                    )
+                    hue_s = target_eda_df[hue_col] if hue_col != "None" else None
+                    pca_c = create_pca_chart(
+                        pca_meta,
+                        hue_series=hue_s,
+                        hue_name=hue_col if hue_col != "None" else None,
+                    )
+                    if pca_c is not None:
+                        st.plotly_chart(pca_c["fig"], use_container_width=True, config=PLOTLY_CONFIG)
+                        st.caption(f"💡 {pca_c['caption']}")
+
+                    st.markdown("**Principal Component Loadings (Feature Weights):**")
+                    st.dataframe(pca_meta["loadings"].round(3), use_container_width=True)
+                else:
+                    st.info("PCA requires at least 2 non-constant numerical features with sufficient observations.")
+
         with eda_sub_gallery:
             st.markdown(f"#### Complete Automated Chart Gallery ({len(all_charts)} Charts Generated)")
+            st.caption("📸 Click the camera icon in the top-right toolbar of any chart to download publication-ready 2x PNG.")
             for idx, c in enumerate(all_charts):
                 with st.expander(f"Chart #{idx + 1}: {c['title']} ({c['chart_type'].title()})", expanded=(idx < 2)):
                     st.plotly_chart(
                         c["fig"],
                         use_container_width=True,
+                        config=PLOTLY_CONFIG,
                         key=f"eda_gallery_{c['id']}_{idx}",
                     )
                     st.caption(f"💡 {c['caption']}")
+                    st.download_button(
+                        label="📥 Download Chart JSON",
+                        data=c["fig"].to_json(),
+                        file_name=f"{c['id']}.json",
+                        mime="application/json",
+                        key=f"eda_dl_{c['id']}_{idx}",
+                    )
 
     with tab_specs:
         st.subheader("Component Pipeline Specification")
