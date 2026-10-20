@@ -354,22 +354,46 @@ def describe_correlation(r: float) -> str:
     return f"{strength} {direction} relationship"
 
 
-def create_correlation_heatmap(corr_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Generate a correlation heatmap for numerical features."""
+def create_correlation_heatmap(
+    corr_data: Dict[str, Any], lower_only: bool = True
+) -> Optional[Dict[str, Any]]:
+    """Generate a correlation heatmap for numerical features.
+
+    Parameters
+    ----------
+    corr_data : Dict[str, Any]
+        Dictionary containing 'pearson' DataFrame and 'pairs' list.
+    lower_only : bool, default True
+        If True, display only the lower triangle (including diagonal),
+        masking the redundant upper triangle to reduce visual clutter.
+    """
     pearson_mat = corr_data.get("pearson")
     if pearson_mat is None or pearson_mat.empty or len(pearson_mat.columns) < 2:
         return None
 
     cols = list(pearson_mat.columns)
-    z_vals = pearson_mat.values
+    z_vals = np.array(pearson_mat.values, dtype=float)
+    n_features = len(cols)
 
-    text_vals = [[f"{val:.2f}" if not np.isnan(val) else "" for val in row] for row in z_vals]
+    if lower_only:
+        z_vals = z_vals.copy()
+        for i in range(n_features):
+            for j in range(n_features):
+                if j > i:
+                    z_vals[i, j] = np.nan
+
+    text_vals = [
+        [f"{val:.2f}" if not np.isnan(val) else "" for val in row]
+        for row in z_vals
+    ]
+
+    clean_labels = [c.replace("_", " ").title() for c in cols]
 
     fig = go.Figure(
         data=go.Heatmap(
             z=z_vals,
-            x=[c.replace("_", " ").title() for c in cols],
-            y=[c.replace("_", " ").title() for c in cols],
+            x=clean_labels,
+            y=clean_labels,
             text=text_vals,
             texttemplate="%{text}",
             textfont={"size": 11},
@@ -377,13 +401,15 @@ def create_correlation_heatmap(corr_data: Dict[str, Any]) -> Optional[Dict[str, 
             zmin=-1.0,
             zmax=1.0,
             colorbar={"title": "Pearson r"},
+            hoverongaps=False,
         )
     )
 
     fig.update_layout(
-        title="Bivariate Correlation Heatmap",
+        title="Bivariate Correlation Heatmap" + (" (Lower Triangle)" if lower_only else ""),
         xaxis_title="Features",
         yaxis_title="Features",
+        yaxis={"autorange": "reversed"},
     )
     _apply_theme(fig)
 

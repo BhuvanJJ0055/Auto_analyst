@@ -1,6 +1,7 @@
 """Unit and acceptance tests for the automated visualization engine (modules/visualization.py)."""
 
 from pathlib import Path
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -387,12 +388,21 @@ def test_correlation_heatmap_shows_r_values_as_cell_text() -> None:
         ),
         "pairs": [],
     }
-    chart = create_correlation_heatmap(corr_data)
-    assert chart is not None
-    heatmap_trace = chart["fig"].data[0]
-    assert heatmap_trace.text is not None
-    assert heatmap_trace.text[0][1] == "0.85"
-    assert heatmap_trace.texttemplate == "%{text}"
+    # Test full matrix (lower_only=False)
+    chart_full = create_correlation_heatmap(corr_data, lower_only=False)
+    assert chart_full is not None
+    trace_full = chart_full["fig"].data[0]
+    assert trace_full.text[0][1] == "0.85"
+    assert trace_full.text[1][0] == "0.85"
+    assert trace_full.texttemplate == "%{text}"
+
+    # Test lower triangle only (lower_only=True, default)
+    chart_lower = create_correlation_heatmap(corr_data, lower_only=True)
+    assert chart_lower is not None
+    trace_lower = chart_lower["fig"].data[0]
+    assert trace_lower.text[1][0] == "0.85"
+    assert trace_lower.text[0][1] == ""  # Masked upper triangle
+    assert np.isnan(trace_lower.z[0][1])  # NaN in z values for upper triangle
 
 
 class TestPValueAndCorrelationDescription:

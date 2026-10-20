@@ -1082,7 +1082,15 @@ if df_loaded is not None and ingestion_meta is not None:
         with eda_sub_corr:
             st.markdown("#### Bivariate Correlations & Hypothesis Testing")
             if len(num_cols) >= 2:
-                h_map = create_correlation_heatmap(eda_results["correlations"])
+                show_lower = st.checkbox(
+                    "Show lower triangle only",
+                    value=True,
+                    key="eda_corr_lower_triangle",
+                    help="Display only the lower half of the symmetric correlation matrix to eliminate duplicate information.",
+                )
+                h_map = create_correlation_heatmap(
+                    eda_results["correlations"], lower_only=show_lower
+                )
                 if h_map is not None:
                     st.plotly_chart(
                         h_map["fig"],
