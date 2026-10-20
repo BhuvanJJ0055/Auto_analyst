@@ -218,24 +218,24 @@ def make_messy_sales(num_rows: int = 5000) -> pd.DataFrame:
 
 
 def make_timeseries_sales() -> pd.DataFrame:
-    """Generate 3 continuous years of daily transaction volume with trend and seasonality."""
+    """Generate 3 continuous years of daily transaction volume with clear trend and yearly seasonality."""
     start_date = datetime(2022, 1, 1)
     dates = [start_date + timedelta(days=i) for i in range(1096)]  # 3 full years: 2022, 2023, 2024
 
     records = []
     order_num = 1
     for day_idx, d in enumerate(dates):
-        # Base daily order volume: baseline trend + day-of-week seasonality + annual seasonality
+        # Base daily order volume: strong growth trend + weekly boost + prominent annual cycle
         day_of_week = d.weekday()
-        weekend_boost = 1.35 if day_of_week in [5, 6] else 1.0
-        annual_cycle = 1.0 + 0.3 * np.sin(2 * np.pi * d.timetuple().tm_yday / 365.25)
-        trend = 1.0 + (0.45 * (day_idx / 1096.0))  # 45% growth over 3 years
-        q4_holiday_spike = 1.5 if d.month in [10, 11, 12] else 1.0
+        weekend_boost = 1.25 if day_of_week in [5, 6] else 1.0
+        annual_cycle = 1.0 + 0.35 * np.sin(2 * np.pi * d.timetuple().tm_yday / 365.25)
+        trend = 1.0 + (7.0 * (day_idx / 1096.0))  # Strong steady growth across 3 years
+        q4_holiday_spike = 1.35 if d.month in [10, 11, 12] else 1.0
 
         daily_volume = max(
-            1,
+            2,
             int(
-                np.random.poisson(lam=12 * weekend_boost * annual_cycle * trend * q4_holiday_spike)
+                np.random.poisson(lam=4 * weekend_boost * annual_cycle * trend * q4_holiday_spike)
             ),
         )
 

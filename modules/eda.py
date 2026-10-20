@@ -442,19 +442,31 @@ def compute_timeseries_analysis(
     p_val_flt = float(p_val) if not np.isnan(p_val) else 1.0
     slope_flt = float(slope) if not np.isnan(slope) else 0.0
 
-    has_trend = bool(p_val_flt < 0.05 and abs(slope_flt) > 1e-5)
+    # Trend strength classification based on R²:
+    # R² < 0.3: weak
+    # 0.3 ≤ R² ≤ 0.6: moderate
+    # R² > 0.6: strong
+    if r2 >= 0.6:
+        trend_strength = "strong"
+    elif r2 >= 0.3:
+        trend_strength = "moderate"
+    else:
+        trend_strength = "weak"
+
+    has_trend = bool(p_val_flt < 0.05 and abs(slope_flt) > 1e-5 and r2 >= 0.02)
     if has_trend:
-        trend_direction = "upward" if slope_flt > 0 else "downward"
+        direction = "upward" if slope_flt > 0 else "downward"
+        trend_direction = f"{trend_strength} {direction}"
     else:
         trend_direction = "flat"
+        trend_strength = "flat"
 
-    # Seasonality check via autocorrelation and calendar ANOVA
-    has_seasonality = False
-    seasonal_period = None
+    # Multi-frequency seasonality testing (Weekly, Monthly, Yearly)
+    detected_seasonalities: List[str] = []
 
     if len(daily) >= 14:
+        # 1. Weekly seasonality (lag 7 autocorrelation or day-of-week ANOVA)
         autocorr_7 = daily[num_col].autocorr(lag=7)
-        # Check day-of-week ANOVA
         daily["_dow"] = daily[dt_col].dt.dayofweek
         dow_groups = [grp[num_col].values for _, grp in daily.groupby("_dow") if len(grp) >= 2]
         dow_p = 1.0
@@ -464,23 +476,41 @@ def compute_timeseries_analysis(
             except Exception:
                 dow_p = 1.0
 
-        # Check month-of-year ANOVA if span is over 180 days
-        month_p = 1.0
-        if len(daily) >= 180:
+        if (not np.isnan(autocorr_7) and autocorr_7 > 0.15) or dow_p < 0.05:
+            detected_seasonalities.append("weekly (7 days)")
+
+        # 2. Monthly seasonality (lag 30 autocorrelation or day-of-month ANOVA)
+        if len(daily) >= 60:
+            autocorr_30 = daily[num_col].autocorr(lag=30)
+            daily["_dom"] = daily[dt_col].dt.day
+            dom_groups = [grp[num_col].values for _, grp in daily.groupby("_dom") if len(grp) >= 2]
+            dom_p = 1.0
+            if len(dom_groups) >= 2:
+                try:
+                    _, dom_p = stats.f_oneway(*dom_groups)
+                except Exception:
+                    dom_p = 1.0
+
+            if (not np.isnan(autocorr_30) and autocorr_30 > 0.15) or dom_p < 0.05:
+                detected_seasonalities.append("monthly (~30 days)")
+
+        # 3. Yearly / Annual seasonality (month-of-year ANOVA or lag 365 autocorrelation)
+        if len(daily) >= 365:
             daily["_month"] = daily[dt_col].dt.month
             month_groups = [grp[num_col].values for _, grp in daily.groupby("_month") if len(grp) >= 2]
+            month_p = 1.0
             if len(month_groups) >= 2:
                 try:
                     _, month_p = stats.f_oneway(*month_groups)
                 except Exception:
                     month_p = 1.0
 
-        if (not np.isnan(autocorr_7) and autocorr_7 > 0.20) or dow_p < 0.01:
-            has_seasonality = True
-            seasonal_period = "weekly (7 days)"
-        elif month_p < 0.01:
-            has_seasonality = True
-            seasonal_period = "annual / seasonal cycles"
+            autocorr_365 = daily[num_col].autocorr(lag=365) if len(daily) >= 730 else np.nan
+            if month_p < 0.05 or (not np.isnan(autocorr_365) and autocorr_365 > 0.15):
+                detected_seasonalities.append("yearly (365 days)")
+
+    has_seasonality = len(detected_seasonalities) > 0
+    seasonal_period = " & ".join(detected_seasonalities) if detected_seasonalities else None
 
     return {
         "dt_col": dt_col,
@@ -488,6 +518,7 @@ def compute_timeseries_analysis(
         "count": n,
         "has_trend": has_trend,
         "trend_direction": trend_direction,
+        "trend_strength": trend_strength,
         "trend_slope": slope_flt,
         "trend_r2": r2,
         "trend_pvalue": p_val_flt,

@@ -190,7 +190,7 @@ def test_timeseries_handles_nat_values_safely_without_crashing() -> None:
 
 
 def test_timeseries_detects_trend_and_seasonality_in_timeseries_benchmark() -> None:
-    """Verify timeseries_sales.csv benchmark shows trend and seasonality."""
+    """Verify timeseries_sales.csv benchmark shows trend strength, R2, and multi-scale seasonality."""
     ts_path = SAMPLE_DATA_DIR / "timeseries_sales.csv"
     df_ts, _ = load_file(ts_path)
 
@@ -198,10 +198,45 @@ def test_timeseries_detects_trend_and_seasonality_in_timeseries_benchmark() -> N
     ts_results = eda_res["timeseries_analysis"]
 
     assert len(ts_results) > 0
-    # Primary metric revenue should detect trend or seasonality
+    # Primary metric revenue should detect trend with strength label and multi-scale seasonality
     rev_ts = [r for r in ts_results if r["num_col"] == "revenue"][0]
     assert rev_ts["count"] > 1000
-    assert rev_ts["has_trend"] is True or rev_ts["has_seasonality"] is True
+    assert rev_ts["has_trend"] is True
+    assert rev_ts["trend_strength"] in {"weak", "moderate", "strong"}
+    assert any(w in rev_ts["trend_direction"] for w in ["weak", "moderate", "strong"])
+    assert "trend_r2" in rev_ts
+    assert rev_ts["trend_r2"] > 0.05
+    assert rev_ts["has_seasonality"] is True
+    assert "weekly (7 days)" in rev_ts["seasonal_period"]
+    assert "yearly (365 days)" in rev_ts["seasonal_period"]
+
+
+def test_trend_strength_bands_classification() -> None:
+    """Verify trend strength classification bands: weak (< 0.3), moderate (0.3-0.6), strong (> 0.6)."""
+    dates = pd.date_range("2023-01-01", periods=100, freq="D")
+
+    # 1. Strong trend (R2 > 0.6)
+    x = np.arange(100)
+    strong_y = 5.0 * x + np.random.normal(0, 5, 100)
+    df_strong = pd.DataFrame({"order_date": dates, "val": strong_y})
+    res_strong = compute_timeseries_analysis(df_strong, "order_date", "val")
+    assert res_strong["trend_strength"] == "strong"
+    assert res_strong["trend_r2"] > 0.6
+    assert "strong upward" in res_strong["trend_direction"]
+
+    # 2. Moderate trend (0.3 <= R2 <= 0.6)
+    np.random.seed(42)
+    mod_y = 1.0 * x + np.random.normal(0, 45, 100)
+    df_mod = pd.DataFrame({"order_date": dates, "val": mod_y})
+    res_mod = compute_timeseries_analysis(df_mod, "order_date", "val")
+    assert res_mod["trend_strength"] in {"moderate", "weak"}
+
+    # 3. Flat / No trend (random noise)
+    flat_y = np.random.normal(50, 10, 100)
+    df_flat = pd.DataFrame({"order_date": dates, "val": flat_y})
+    res_flat = compute_timeseries_analysis(df_flat, "order_date", "val")
+    assert res_flat["trend_direction"] == "flat"
+
 
 
 def test_eda_on_single_numeric_column_dataset_does_not_crash() -> None:
