@@ -114,6 +114,33 @@ def test_correlations_match_scipy_directly() -> None:
     assert np.isclose(xy_pair["spearman_p"], expected_s_p, rtol=1e-5)
 
 
+def test_clean_sales_revenue_profit_correlation_matches_pandas_directly() -> None:
+    """Assert app's correlation between revenue and profit equals df[['revenue','profit']].corr().iloc[0,1] to 3 decimals."""
+    clean_path = SAMPLE_DATA_DIR / "clean_sales.csv"
+    df, _ = load_file(clean_path)
+    expected_r = float(df[["revenue", "profit"]].corr().iloc[0, 1])
+
+    eda_res = run_eda(df)
+    corr_meta = eda_res["correlations"]
+
+    # 1. Pearson matrix value matches pandas
+    mat_r = float(corr_meta["pearson"].loc["revenue", "profit"])
+    assert round(mat_r, 3) == round(expected_r, 3), (
+        f"Heatmap matrix r ({mat_r:.4f}) does not match pandas ({expected_r:.4f})"
+    )
+
+    # 2. Top pairs list value matches pandas
+    rev_prof_pairs = [
+        p for p in corr_meta["pairs"]
+        if set([p["col1"], p["col2"]]) == {"revenue", "profit"}
+    ]
+    assert len(rev_prof_pairs) == 1
+    pair_r = rev_prof_pairs[0]["pearson_r"]
+    assert round(pair_r, 3) == round(expected_r, 3), (
+        f"Pairs list r ({pair_r:.4f}) does not match pandas ({expected_r:.4f})"
+    )
+
+
 def test_group_comparison_anova_matches_scipy() -> None:
     """Verify group comparison one-way ANOVA F-statistic matches scipy.stats.f_oneway."""
     df = pd.DataFrame(
