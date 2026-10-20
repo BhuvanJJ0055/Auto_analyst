@@ -375,3 +375,23 @@ def test_histogram_bin_count_sensible_for_every_numeric_column_in_clean_sales() 
             f"(range={data_range:.2f}, bin_size={b['size']:.4f})"
         )
 
+
+def test_correlation_heatmap_shows_r_values_as_cell_text() -> None:
+    """Verify correlation heatmap displays Pearson r values inside every cell."""
+    from modules.visualization import create_correlation_heatmap
+    corr_data = {
+        "pearson": pd.DataFrame(
+            [[1.0, 0.85], [0.85, 1.0]],
+            columns=["col_a", "col_b"],
+            index=["col_a", "col_b"],
+        ),
+        "pairs": [],
+    }
+    chart = create_correlation_heatmap(corr_data)
+    assert chart is not None
+    heatmap_trace = chart["fig"].data[0]
+    assert heatmap_trace.text is not None
+    assert heatmap_trace.text[0][1] == "0.85"
+    assert heatmap_trace.texttemplate == "%{text}"
+
+

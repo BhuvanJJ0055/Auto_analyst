@@ -319,11 +319,16 @@ def create_correlation_heatmap(corr_data: Dict[str, Any]) -> Optional[Dict[str, 
     cols = list(pearson_mat.columns)
     z_vals = pearson_mat.values
 
+    text_vals = [[f"{val:.2f}" if not np.isnan(val) else "" for val in row] for row in z_vals]
+
     fig = go.Figure(
         data=go.Heatmap(
             z=z_vals,
             x=[c.replace("_", " ").title() for c in cols],
             y=[c.replace("_", " ").title() for c in cols],
+            text=text_vals,
+            texttemplate="%{text}",
+            textfont={"size": 11},
             colorscale="Viridis",
             zmin=-1.0,
             zmax=1.0,
