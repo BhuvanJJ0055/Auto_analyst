@@ -310,6 +310,50 @@ def create_categorical_bar(
     }
 
 
+def format_p_value(p: Optional[float], include_prefix: bool = True) -> str:
+    """Format a p-value cleanly, never printing 0.00e+00.
+
+    Returns '< 0.001' (or 'p < 0.001') for very small values,
+    and standard decimal formatting for higher p-values.
+    """
+    if p is None or (isinstance(p, float) and np.isnan(p)):
+        return "p = N/A" if include_prefix else "N/A"
+    if p < 0.001:
+        return "p < 0.001" if include_prefix else "< 0.001"
+    if p < 0.01:
+        return f"p = {p:.3f}" if include_prefix else f"{p:.3f}"
+    return f"p = {p:.2f}" if include_prefix else f"{p:.2f}"
+
+
+def describe_correlation(r: float) -> str:
+    """Return a plain-English interpretation of a Pearson correlation r value.
+
+    Examples:
+        0.84  -> 'very strong positive relationship'
+       -0.65  -> 'strong negative relationship'
+        0.45  -> 'moderate positive relationship'
+       -0.25  -> 'weak negative relationship'
+        0.05  -> 'very weak positive relationship'
+        0.01  -> 'negligible relationship'
+    """
+    abs_r = abs(r)
+    if abs_r < 0.05:
+        return "negligible relationship"
+    if abs_r >= 0.8:
+        strength = "very strong"
+    elif abs_r >= 0.6:
+        strength = "strong"
+    elif abs_r >= 0.4:
+        strength = "moderate"
+    elif abs_r >= 0.2:
+        strength = "weak"
+    else:
+        strength = "very weak"
+
+    direction = "positive" if r > 0 else "negative"
+    return f"{strength} {direction} relationship"
+
+
 def create_correlation_heatmap(corr_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Generate a correlation heatmap for numerical features."""
     pearson_mat = corr_data.get("pearson")
@@ -350,9 +394,11 @@ def create_correlation_heatmap(corr_data: Dict[str, Any]) -> Optional[Dict[str, 
         c2 = top_p["col2"].replace("_", " ").title()
         r = top_p["pearson_r"]
         p_val = top_p["pearson_p"]
+        reading = describe_correlation(r)
+        p_str = format_p_value(p_val)
         caption = (
-            f"Strongest linear association detected between {c1} and {c2} "
-            f"(r = {r:+.2f}, p = {p_val:.2e})."
+            f"Strongest linear association detected between {c1} and {c2}: "
+            f"{reading} (r = {r:+.2f}, {p_str})."
         )
     else:
         caption = "Correlation matrix displaying pairwise linear associations between numerical variables."
@@ -414,12 +460,12 @@ def create_scatter_plot(
 
     r = pair_meta.get("pearson_r", 0.0)
     p = pair_meta.get("pearson_p", 1.0)
-    strength = "strong" if abs(r) > 0.7 else ("moderate" if abs(r) > 0.3 else "weak")
-    direction = "positive" if r > 0 else "negative"
+    reading = describe_correlation(r)
+    p_str = format_p_value(p)
 
     caption = (
-        f"{c1_title} and {c2_title} exhibit a {strength} {direction} linear relationship "
-        f"(r = {r:+.2f}, p = {p:.2e})."
+        f"{c1_title} and {c2_title} exhibit a {reading} "
+        f"(r = {r:+.2f}, {p_str})."
     )
 
     return {
@@ -470,10 +516,11 @@ def create_grouped_bar(
     sig = group_comp.get("significant", False)
 
     if anova_f is not None and anova_p is not None:
+        p_str = format_p_value(anova_p)
         caption = (
             f"Variations in mean {n_title} across {c_title} are "
             f"{'statistically significant' if sig else 'not statistically significant'} "
-            f"(one-way ANOVA F = {anova_f:.2f}, p = {anova_p:.2e})."
+            f"(one-way ANOVA F = {anova_f:.2f}, {p_str})."
         )
     else:
         caption = f"Group means and standard deviations of {n_title} across {c_title} categories."

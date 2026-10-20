@@ -22,7 +22,9 @@ from modules.visualization import (
     create_histogram,
     create_scatter_plot,
     create_timeseries_chart,
+    describe_correlation,
     describe_distribution,
+    format_p_value,
     generate_visualizations,
 )
 
@@ -1092,13 +1094,24 @@ if df_loaded is not None and ingestion_meta is not None:
                 pairs = eda_results["correlations"].get("pairs", [])
                 if pairs:
                     st.markdown("##### Significant Numeric Associations")
-                    pair_options = [f"{p['col1']} vs. {p['col2']} (r = {p['pearson_r']:+.2f})" for p in pairs[:5]]
+                    pair_options = [
+                        f"{p['col1']} vs. {p['col2']} (r = {p['pearson_r']:+.2f}, {format_p_value(p.get('pearson_p', 0.0))})"
+                        for p in pairs[:5]
+                    ]
                     selected_pair_idx = st.selectbox(
                         "Select Pair to Inspect Scatter with OLS Trendline:",
                         range(len(pair_options)),
                         format_func=lambda i: pair_options[i],
                     )
                     chosen_pair = pairs[selected_pair_idx]
+                    chosen_r = chosen_pair["pearson_r"]
+                    chosen_p = chosen_pair.get("pearson_p", 0.0)
+                    reading = describe_correlation(chosen_r)
+                    p_disp = format_p_value(chosen_p)
+                    st.info(
+                        f"🔍 **Interpretation**: `{chosen_pair['col1']}` and `{chosen_pair['col2']}` show a "
+                        f"**{reading}** (r = {chosen_r:+.2f}, {p_disp})."
+                    )
                     scatter_c = create_scatter_plot(
                         target_eda_df, chosen_pair["col1"], chosen_pair["col2"], chosen_pair
                     )

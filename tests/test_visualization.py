@@ -395,3 +395,67 @@ def test_correlation_heatmap_shows_r_values_as_cell_text() -> None:
     assert heatmap_trace.texttemplate == "%{text}"
 
 
+class TestPValueAndCorrelationDescription:
+    """Tests ensuring p-values never display 0.00e+00 and correlations have plain-English readings."""
+
+    def test_format_p_value_tiny_values_show_less_than_threshold(self):
+        from modules.visualization import format_p_value
+
+        assert format_p_value(0.0) == "p < 0.001"
+        assert format_p_value(1e-15) == "p < 0.001"
+        assert format_p_value(0.0005) == "p < 0.001"
+        assert format_p_value(0.0, include_prefix=False) == "< 0.001"
+        assert "0.00e+00" not in format_p_value(0.0)
+
+    def test_format_p_value_moderate_and_non_significant(self):
+        from modules.visualization import format_p_value
+
+        assert format_p_value(0.0042) == "p = 0.004"
+        assert format_p_value(0.046) == "p = 0.05"
+        assert format_p_value(0.789) == "p = 0.79"
+        assert format_p_value(None) == "p = N/A"
+
+    def test_describe_correlation_bands_and_direction(self):
+        from modules.visualization import describe_correlation
+
+        assert describe_correlation(0.85) == "very strong positive relationship"
+        assert describe_correlation(-0.82) == "very strong negative relationship"
+        assert describe_correlation(0.68) == "strong positive relationship"
+        assert describe_correlation(-0.62) == "strong negative relationship"
+        assert describe_correlation(0.45) == "moderate positive relationship"
+        assert describe_correlation(-0.30) == "weak negative relationship"
+        assert describe_correlation(0.12) == "very weak positive relationship"
+        assert describe_correlation(0.01) == "negligible relationship"
+
+    def test_heatmap_and_scatter_captions_never_contain_zero_exponential(self):
+        from modules.visualization import create_correlation_heatmap, create_scatter_plot
+
+        corr_data = {
+            "pearson": pd.DataFrame(
+                [[1.0, 0.84], [0.84, 1.0]],
+                columns=["revenue", "profit"],
+                index=["revenue", "profit"],
+            ),
+            "pairs": [
+                {
+                    "col1": "revenue",
+                    "col2": "profit",
+                    "pearson_r": 0.84,
+                    "pearson_p": 0.0,  # Extreme significance
+                }
+            ],
+        }
+        h_chart = create_correlation_heatmap(corr_data)
+        assert h_chart is not None
+        assert "0.00e+00" not in h_chart["caption"]
+        assert "p < 0.001" in h_chart["caption"]
+        assert "very strong positive relationship" in h_chart["caption"]
+
+        df_dummy = pd.DataFrame({"revenue": [10, 20, 30], "profit": [2, 4, 6]})
+        s_chart = create_scatter_plot(df_dummy, "revenue", "profit", corr_data["pairs"][0])
+        assert "0.00e+00" not in s_chart["caption"]
+        assert "p < 0.001" in s_chart["caption"]
+        assert "very strong positive relationship" in s_chart["caption"]
+
+
+
