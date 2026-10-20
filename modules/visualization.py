@@ -42,13 +42,13 @@ def _apply_theme(fig: go.Figure) -> go.Figure:
 
 
 def describe_distribution(skew: float, kurt: float) -> tuple:
-    """Return human-readable (skewness_label, kurtosis_label) from raw stats.
+    """Return (long_skew_label, kurt_label, short_skew_label) from raw stats.
 
     Skewness bands
     --------------
-    |skew| < 0.5          → 'approximately symmetric'
-    0.5 ≤ |skew| ≤ 1.0   → 'moderately right/left-skewed'
-    |skew| > 1.0          → 'highly right/left-skewed'
+    |skew| < 0.5          → long: 'approximately symmetric',  short: 'Symmetric'
+    0.5 ≤ |skew| ≤ 1.0   → long: 'moderately right/left-skewed', short: 'Mod. skewed'
+    |skew| > 1.0          → long: 'highly right/left-skewed',  short: 'Highly skewed'
 
     Kurtosis bands (excess kurtosis)
     ---------------------------------
@@ -60,12 +60,15 @@ def describe_distribution(skew: float, kurt: float) -> tuple:
 
     if abs_skew < 0.5:
         skew_label = "approximately symmetric"
+        short_label = "Symmetric"
     elif abs_skew <= 1.0:
         direction = "right" if skew > 0 else "left"
         skew_label = f"moderately {direction}-skewed"
+        short_label = "Mod. skewed"
     else:
         direction = "right" if skew > 0 else "left"
         skew_label = f"highly {direction}-skewed"
+        short_label = "Highly skewed"
 
     if kurt < -1.0:
         kurt_label = "flat (platykurtic)"
@@ -74,108 +77,85 @@ def describe_distribution(skew: float, kurt: float) -> tuple:
     else:
         kurt_label = "normal-tailed (mesokurtic)"
 
-    return skew_label, kurt_label
+    return skew_label, kurt_label, short_label
 
 
-def describe_distribution_short(skew: float, kurt: float, is_normal: bool = False) -> tuple:
-    """Return compact (skewness_card_label, kurtosis_card_label) for metric cards.
+def _compute_bins(series: pd.Series) -> Dict[str, float]:
+    """Compute adaptive histogram bin edges using Freedman-Diaconis, falling back to Sturges.
 
-    Skewness card labels (no direction, fits in a narrow card)
-    -----------------------------------------------------------
-    is_normal=True         → 'Normal'
-    |skew| < 0.5           → 'Symmetric'
-    0.5 ≤ |skew| ≤ 1.0    → 'Moderately skewed'
-    |skew| > 1.0           → 'Highly skewed'
-
-    Kurtosis card labels
-    --------------------
-    kurt < -1  → 'Flat tail'
-    kurt > 1   → 'Heavy tail'
-    otherwise  → 'Normal tail'
-    """
-    if is_normal:
-        return "Normal", "Normal tail"
-
-    abs_skew = abs(skew)
-    if abs_skew < 0.5:
-        skew_card = "Symmetric"
-    elif abs_skew <= 1.0:
-        skew_card = "Moderately skewed"
-    else:
-        skew_card = "Highly skewed"
-
-    if kurt < -1.0:
-        kurt_card = "Flat tail"
-    elif kurt > 1.0:
-        kurt_card = "Heavy tail"
-    else:
-        kurt_card = "Normal tail"
-
-    return skew_card, kurt_card
-
-
-def _adaptive_bins(series: pd.Series) -> int:
-    """Compute a sensible bin count using Freedman-Diaconis, falling back to Sturges.
-
-    Rules
-    -----
-    * Freedman-Diaconis: bin_width = 2 * IQR * n^(-1/3).  When IQR == 0 or the
-      resulting count is outside [5, 60], fall back to Sturges.
-    * Sturges: bins = ceil(log2(n)) + 1, clamped to [5, 60].
-    * Integer columns: bin width is raised to at least 1 so bars align to whole
-      numbers and there are no sub-integer gaps.
+    - Freedman-Diaconis: h = 2 * IQR * n^(-1/3)
+    - Sturges fallback when IQR = 0 or the FD bin count would be > 60
+    - Integer columns: bin width is rounded up to the nearest integer ≥ 1
+    - Result bin count is clamped to [5, 60]
     """
     clean = pd.to_numeric(series, errors="coerce").dropna()
     n = len(clean)
     if n < 2:
-        return 5
+        return {"start": float(clean.min()) if n else 0.0, "end": float(clean.max()) if n else 1.0, "size": 1.0}
 
-    is_integer_col = (clean == clean.round()).all() and clean.nunique() <= 100
-
-    data_range = float(clean.max() - clean.min())
+    data_min = float(clean.min())
+    data_max = float(clean.max())
+    data_range = data_max - data_min
     if data_range == 0:
-        return 5
+        return {"start": data_min - 0.5, "end": data_max + 0.5, "size": 1.0}
+
+    # Detect integer-valued column
+    is_integer_col = (clean == clean.round()).all()
 
     # Freedman-Diaconis
-    q75, q25 = float(np.percentile(clean, 75)), float(np.percentile(clean, 25))
+    q75, q25 = float(clean.quantile(0.75)), float(clean.quantile(0.25))
     iqr = q75 - q25
-    fd_bins: Optional[int] = None
     if iqr > 0:
         fd_width = 2.0 * iqr * (n ** (-1.0 / 3.0))
-        if is_integer_col:
-            fd_width = max(fd_width, 1.0)  # never narrower than 1 for integers
-        fd_bins_raw = int(np.ceil(data_range / fd_width))
-        if 5 <= fd_bins_raw <= 60:
-            fd_bins = fd_bins_raw
+        fd_bins = int(np.ceil(data_range / fd_width))
+    else:
+        fd_bins = 0  # trigger Sturges fallback
 
     # Sturges fallback
-    sturges = int(np.ceil(np.log2(n))) + 1
-    sturges = max(5, min(60, sturges))
+    sturges_bins = int(np.ceil(np.log2(n))) + 1
 
-    bins = fd_bins if fd_bins is not None else sturges
+    # Choose: use FD if it gives a sensible count, else Sturges
+    if 5 <= fd_bins <= 60:
+        n_bins = fd_bins
+    else:
+        n_bins = max(5, min(60, sturges_bins))
 
-    # For integer columns cap so bin width >= 1 (no fractional-value gaps)
+    bin_width = data_range / n_bins
+
+    # Integer columns: bin width must be ≥ 1 and a whole number
     if is_integer_col:
-        max_bins_for_int = max(5, int(data_range))
-        bins = min(bins, max_bins_for_int)
+        bin_width = max(1.0, np.ceil(bin_width))
+        n_bins = int(np.ceil(data_range / bin_width))
+        # For low-cardinality integers (e.g. ratings 1-5, range=4),
+        # the minimum sensible bin count is the range itself, not 5.
+        min_bins = max(1, int(data_range))
+        n_bins = max(min_bins, min(60, n_bins))
 
-    return max(5, min(60, bins))
+    # Align start to a clean boundary
+    start = data_min - (bin_width * 0.05)  # tiny left pad so first bar is full
+    end = data_max + (bin_width * 0.05)
+
+    return {"start": start, "end": end, "size": bin_width}
 
 
 def create_histogram(
     series: pd.Series, col_name: str, num_stats: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """Generate a distribution histogram with adaptive bins and a calculated caption."""
+    """Generate a distribution histogram with descriptive axes and calculated caption."""
     clean = pd.to_numeric(series, errors="coerce").dropna()
     clean_title = col_name.replace("_", " ").title()
 
-    nbins = _adaptive_bins(clean)
+    xbins = _compute_bins(series)
 
     fig = go.Figure()
     fig.add_trace(
         go.Histogram(
             x=clean,
-            nbinsx=nbins,
+            xbins=dict(
+                start=xbins["start"],
+                end=xbins["end"],
+                size=xbins["size"],
+            ),
             marker_color="#58A6FF",
             opacity=0.85,
             name="Count",
@@ -211,7 +191,7 @@ def create_histogram(
         shape_desc = "follows a normal distribution"
         kurt_desc = ""
     else:
-        skew_label, kurt_label = describe_distribution(skew, kurt)
+        skew_label, kurt_label, _ = describe_distribution(skew, kurt)
         shape_desc = f"is {skew_label}"
         kurt_desc = f"; tail shape is {kurt_label}"
 

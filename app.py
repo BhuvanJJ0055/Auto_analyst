@@ -23,7 +23,6 @@ from modules.visualization import (
     create_scatter_plot,
     create_timeseries_chart,
     describe_distribution,
-    describe_distribution_short,
     generate_visualizations,
 )
 
@@ -1036,9 +1035,14 @@ if df_loaded is not None and ingestion_meta is not None:
                 is_norm = n_stats.get("is_normal", False)
                 _skew = n_stats.get("skewness", 0.0) or 0.0
                 _kurt = n_stats.get("kurtosis", 0.0) or 0.0
-                _skew_card, _kurt_card = describe_distribution_short(_skew, _kurt, is_norm)
-                stat_col7.metric("Distribution", _skew_card)
-                stat_col7.caption(_kurt_card)
+                if is_norm:
+                    dist_label = "Normal (p > 0.05)"
+                    _kl = "normal-tailed"
+                else:
+                    _sl, _kl, _short = describe_distribution(_skew, _kurt)
+                    dist_label = _short
+                stat_col7.metric("Distribution", dist_label)
+                stat_col7.caption(f"Tail: {_kl}")
                 stat_col8.metric("Outliers (1.5×IQR)", f"{n_stats.get('outliers_count', 0):,}")
 
                 # Display Histogram & Boxplot

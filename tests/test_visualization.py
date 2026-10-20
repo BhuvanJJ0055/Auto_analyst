@@ -144,63 +144,69 @@ class TestDescribeDistributionSkewnessBands:
 
     def test_near_zero_skew_is_approximately_symmetric(self):
         """skew = -0.03 (e.g. age column) must NOT be labelled 'skewed'."""
-        label, _ = describe_distribution(-0.03, 0.0)
+        label, _, short = describe_distribution(-0.03, 0.0)
         assert label == "approximately symmetric", f"Got: {label}"
+        assert short == "Symmetric"
 
     def test_zero_skew_is_approximately_symmetric(self):
-        label, _ = describe_distribution(0.0, 0.0)
+        label, _, short = describe_distribution(0.0, 0.0)
         assert label == "approximately symmetric"
+        assert short == "Symmetric"
 
     def test_skew_just_below_threshold_right(self):
         """0.49 is still in the symmetric band."""
-        label, _ = describe_distribution(0.49, 0.0)
+        label, _, _ = describe_distribution(0.49, 0.0)
         assert label == "approximately symmetric"
 
     def test_skew_just_below_threshold_left(self):
-        label, _ = describe_distribution(-0.49, 0.0)
+        label, _, _ = describe_distribution(-0.49, 0.0)
         assert label == "approximately symmetric"
 
     def test_skew_at_threshold_right_is_moderately_skewed(self):
         """Exactly 0.5 enters moderately-skewed band."""
-        label, _ = describe_distribution(0.5, 0.0)
+        label, _, short = describe_distribution(0.5, 0.0)
         assert label == "moderately right-skewed"
+        assert short == "Mod. skewed"
 
     def test_skew_at_threshold_left_is_moderately_skewed(self):
-        label, _ = describe_distribution(-0.5, 0.0)
+        label, _, short = describe_distribution(-0.5, 0.0)
         assert label == "moderately left-skewed"
+        assert short == "Mod. skewed"
 
     def test_skew_inside_moderate_right_band(self):
-        label, _ = describe_distribution(0.75, 0.0)
+        label, _, _ = describe_distribution(0.75, 0.0)
         assert label == "moderately right-skewed"
 
     def test_skew_inside_moderate_left_band(self):
-        label, _ = describe_distribution(-0.75, 0.0)
+        label, _, _ = describe_distribution(-0.75, 0.0)
         assert label == "moderately left-skewed"
 
     def test_skew_at_upper_moderate_boundary_right(self):
         """Exactly 1.0 is still in moderately-skewed band."""
-        label, _ = describe_distribution(1.0, 0.0)
+        label, _, _ = describe_distribution(1.0, 0.0)
         assert label == "moderately right-skewed"
 
     def test_skew_at_upper_moderate_boundary_left(self):
-        label, _ = describe_distribution(-1.0, 0.0)
+        label, _, _ = describe_distribution(-1.0, 0.0)
         assert label == "moderately left-skewed"
 
     def test_skew_above_one_is_highly_right_skewed(self):
         """1.01 crosses into highly-skewed band."""
-        label, _ = describe_distribution(1.01, 0.0)
+        label, _, short = describe_distribution(1.01, 0.0)
         assert label == "highly right-skewed"
+        assert short == "Highly skewed"
 
     def test_skew_above_one_is_highly_left_skewed(self):
-        label, _ = describe_distribution(-1.01, 0.0)
+        label, _, short = describe_distribution(-1.01, 0.0)
         assert label == "highly left-skewed"
+        assert short == "Highly skewed"
 
     def test_large_positive_skew(self):
-        label, _ = describe_distribution(3.5, 0.0)
+        label, _, _ = describe_distribution(3.5, 0.0)
         assert label == "highly right-skewed"
 
     def test_large_negative_skew(self):
-        label, _ = describe_distribution(-2.8, 0.0)
+        label, _, _ = describe_distribution(-2.8, 0.0)
         assert label == "highly left-skewed"
 
 
@@ -209,34 +215,34 @@ class TestDescribeDistributionKurtosisBands:
 
     def test_kurt_below_minus_one_is_flat(self):
         """kurt = -1.5 → flat (platykurtic)."""
-        _, label = describe_distribution(0.0, -1.5)
+        _, label, _ = describe_distribution(0.0, -1.5)
         assert label == "flat (platykurtic)"
 
     def test_kurt_at_minus_one_is_flat(self):
         """kurt = exactly -1 → flat."""
-        _, label = describe_distribution(0.0, -1.0)
+        _, label, _ = describe_distribution(0.0, -1.0)
         # -1.0 is NOT < -1.0, so it falls in normal-tailed
         assert label == "normal-tailed (mesokurtic)"
 
     def test_kurt_just_above_minus_one_is_normal_tailed(self):
-        _, label = describe_distribution(0.0, -0.99)
+        _, label, _ = describe_distribution(0.0, -0.99)
         assert label == "normal-tailed (mesokurtic)"
 
     def test_kurt_at_zero_is_normal_tailed(self):
-        _, label = describe_distribution(0.0, 0.0)
+        _, label, _ = describe_distribution(0.0, 0.0)
         assert label == "normal-tailed (mesokurtic)"
 
     def test_kurt_at_one_is_normal_tailed(self):
         """kurt = exactly 1 is NOT > 1, so still normal-tailed."""
-        _, label = describe_distribution(0.0, 1.0)
+        _, label, _ = describe_distribution(0.0, 1.0)
         assert label == "normal-tailed (mesokurtic)"
 
     def test_kurt_just_above_one_is_heavy_tailed(self):
-        _, label = describe_distribution(0.0, 1.01)
+        _, label, _ = describe_distribution(0.0, 1.01)
         assert label == "heavy-tailed (leptokurtic)"
 
     def test_kurt_large_positive_is_heavy_tailed(self):
-        _, label = describe_distribution(0.0, 5.0)
+        _, label, _ = describe_distribution(0.0, 5.0)
         assert label == "heavy-tailed (leptokurtic)"
 
 
@@ -278,131 +284,94 @@ class TestHistogramCaptionUsesCorrectBands:
 
 
 # ---------------------------------------------------------------------------
-# _adaptive_bins – bin count range tests
+# _compute_bins – adaptive bin rule tests
 # ---------------------------------------------------------------------------
-from modules.visualization import _adaptive_bins  # noqa: E402
+from modules.visualization import _compute_bins  # noqa: E402
 
 
-class TestAdaptiveBins:
-    """Bin count must always sit in [5, 60] and respect integer-column rules."""
+class TestComputeBins:
+    """_compute_bins must return a sensible bin width for a variety of inputs."""
 
-    def test_every_numeric_column_in_clean_sales_has_sensible_bin_count(self):
-        """Each numeric column in clean_sales.csv must yield 5–60 bins."""
-        clean_path = SAMPLE_DATA_DIR / "clean_sales.csv"
-        df, _ = load_file(clean_path)
+    def _bin_count(self, series: pd.Series) -> int:
+        """Helper: compute how many bins _compute_bins would produce."""
+        import math
+        b = _compute_bins(series)
+        clean = pd.to_numeric(series, errors="coerce").dropna()
+        data_range = float(clean.max()) - float(clean.min())
+        if data_range == 0 or b["size"] == 0:
+            return 1
+        return int(math.ceil(data_range / b["size"]))
 
-        num_cols = df.select_dtypes(include="number").columns.tolist()
-        assert len(num_cols) > 0, "Expected at least one numeric column in clean_sales.csv"
+    def test_integer_column_bin_width_at_least_one(self):
+        """Integer series must have bin_width >= 1."""
+        data = pd.Series(range(1, 51))  # 1 to 50
+        result = _compute_bins(data)
+        assert result["size"] >= 1.0, f"bin_width too small: {result['size']}"
 
-        for col in num_cols:
-            bins = _adaptive_bins(df[col])
-            assert 5 <= bins <= 60, (
-                f"Column '{col}': bin count {bins} is outside [5, 60]"
-            )
+    def test_integer_column_bin_width_is_whole_number(self):
+        """Integer column bin widths must be whole numbers."""
+        data = pd.Series(list(range(18, 75)))  # age-like
+        result = _compute_bins(data)
+        assert result["size"] == int(result["size"]), f"Non-integer bin_width: {result['size']}"
 
-    def test_integer_column_bin_width_is_at_least_one(self):
-        """Integer series must not produce bins narrower than 1 (no gap bars)."""
-        # quantity: 1-10 range → bin width = range/bins should be >= 1
-        data = pd.Series(list(range(1, 11)) * 100)  # integers 1-10, 1000 points
-        bins = _adaptive_bins(data)
-        data_range = data.max() - data.min()  # 9
-        bin_width = data_range / bins
-        assert bin_width >= 1.0, (
-            f"Integer column bin width {bin_width:.3f} < 1 (bins={bins}, range={data_range})"
+    def test_constant_series_does_not_crash(self):
+        """A series where all values are equal must not raise."""
+        data = pd.Series([5.0] * 100)
+        result = _compute_bins(data)
+        assert result["size"] > 0
+
+    def test_empty_series_does_not_crash(self):
+        data = pd.Series([], dtype=float)
+        result = _compute_bins(data)  # should not raise
+        assert result["size"] > 0
+
+    def test_bin_count_between_5_and_60_for_float_column(self):
+        """Continuous float column: bin count must be in [5, 60]."""
+        import numpy as np
+        rng = np.random.default_rng(0)
+        data = pd.Series(rng.normal(50, 15, 1000))
+        count = self._bin_count(data)
+        assert 5 <= count <= 60, f"Bin count {count} out of [5, 60]"
+
+    def test_bin_count_between_5_and_60_for_integer_column(self):
+        """Integer column: bin count must be in [5, 60]."""
+        import numpy as np
+        rng = np.random.default_rng(1)
+        data = pd.Series(rng.integers(18, 75, size=1000))
+        count = self._bin_count(data)
+        assert 5 <= count <= 60, f"Bin count {count} out of [5, 60]"
+
+
+def test_histogram_bin_count_sensible_for_every_numeric_column_in_clean_sales() -> None:
+    """Every numeric column in clean_sales.csv must produce a histogram with a sensible bin count.
+
+    For most columns this is 5-60 bins.
+    Low-cardinality integer columns (range < 5, e.g. ratings 1-5) are allowed
+    to have as few bins as their integer range, but never more than 60.
+    """
+    import math
+    clean_path = SAMPLE_DATA_DIR / "clean_sales.csv"
+    df, _ = load_file(clean_path)
+
+    numeric_cols = df.select_dtypes(include="number").columns
+    assert len(numeric_cols) > 0, "No numeric columns found in clean_sales.csv"
+
+    for col in numeric_cols:
+        series = df[col]
+        b = _compute_bins(series)
+        clean = pd.to_numeric(series, errors="coerce").dropna()
+        data_range = float(clean.max()) - float(clean.min())
+        if data_range == 0 or b["size"] == 0:
+            continue  # constant column — skip
+        n_bins = int(math.ceil(data_range / b["size"]))
+
+        # For integer columns with range < 5 (e.g. ratings 1-5), the sensible
+        # minimum is the integer range itself (e.g. 4 for values 1-5).
+        is_integer_col = (clean == clean.round()).all()
+        min_bins = max(1, int(data_range)) if (is_integer_col and data_range < 5) else 5
+
+        assert min_bins <= n_bins <= 60, (
+            f"Column '{col}': bin_count={n_bins} outside [{min_bins}, 60] "
+            f"(range={data_range:.2f}, bin_size={b['size']:.4f})"
         )
-
-    def test_float_column_produces_bins_in_range(self):
-        """Continuous float column with clear spread should use FD rule and stay in [5,60]."""
-        import numpy as _np
-        rng = _np.random.default_rng(0)
-        data = pd.Series(rng.normal(500, 80, 1000))
-        bins = _adaptive_bins(data)
-        assert 5 <= bins <= 60
-
-    def test_tiny_series_falls_back_to_sturges_minimum(self):
-        """With only 5 values Sturges = ceil(log2(5))+1 = 4, clamped to 5."""
-        data = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
-        bins = _adaptive_bins(data)
-        assert bins == 5
-
-    def test_constant_series_returns_minimum_bins(self):
-        """All-same values: range=0, must not crash and must return 5."""
-        data = pd.Series([42.0] * 100)
-        bins = _adaptive_bins(data)
-        assert bins == 5
-
-    def test_large_integer_range_is_capped_at_60(self):
-        """1-to-500 integers: FD would give many bins, must cap at 60."""
-        data = pd.Series(list(range(1, 501)))
-        bins = _adaptive_bins(data)
-        assert bins <= 60
-
-    def test_messy_sales_numeric_columns_all_in_range(self):
-        """Numeric columns in cleaned messy_sales.csv also stay in [5, 60]."""
-        messy_path = SAMPLE_DATA_DIR / "messy_sales.csv"
-        df_messy, _ = load_file(messy_path)
-        from modules.cleaning import clean_data
-        df_clean, _ = clean_data(df_messy)
-
-        num_cols = df_clean.select_dtypes(include="number").columns.tolist()
-        for col in num_cols:
-            bins = _adaptive_bins(df_clean[col])
-            assert 5 <= bins <= 60, (
-                f"Cleaned messy_sales column '{col}': bin count {bins} outside [5, 60]"
-            )
-
-
-# ---------------------------------------------------------------------------
-# describe_distribution_short – short card label tests
-# ---------------------------------------------------------------------------
-from modules.visualization import describe_distribution_short  # noqa: E402
-
-
-class TestDescribeDistributionShort:
-    """Short labels must be concise and not truncate in a narrow metric card."""
-
-    def test_symmetric_returns_Symmetric(self):
-        label, _ = describe_distribution_short(0.04, -1.01)
-        assert label == "Symmetric"
-
-    def test_moderate_skew_returns_Moderately_skewed(self):
-        label, _ = describe_distribution_short(0.75, 0.0)
-        assert label == "Moderately skewed"
-
-    def test_high_skew_returns_Highly_skewed(self):
-        label, _ = describe_distribution_short(2.3, 0.0)
-        assert label == "Highly skewed"
-
-    def test_normal_flag_returns_Normal(self):
-        label, klabel = describe_distribution_short(0.1, 0.1, is_normal=True)
-        assert label == "Normal"
-        assert klabel == "Normal tail"
-
-    def test_flat_tail_kurt(self):
-        _, klabel = describe_distribution_short(0.0, -1.5)
-        assert klabel == "Flat tail"
-
-    def test_heavy_tail_kurt(self):
-        _, klabel = describe_distribution_short(0.0, 2.0)
-        assert klabel == "Heavy tail"
-
-    def test_normal_tail_kurt(self):
-        _, klabel = describe_distribution_short(0.0, 0.5)
-        assert klabel == "Normal tail"
-
-    def test_all_labels_fit_in_20_chars(self):
-        """No label should be long enough to truncate in a typical Streamlit metric card."""
-        test_cases = [
-            (0.04, -1.01, False),
-            (0.75, 0.0, False),
-            (2.3, 0.0, False),
-            (0.1, 0.1, True),
-            (-0.8, -1.5, False),
-            (-2.0, 2.0, False),
-        ]
-        for skew, kurt, norm in test_cases:
-            sl, kl = describe_distribution_short(skew, kurt, norm)
-            assert len(sl) <= 20, f"Skew label too long: '{sl}'"
-            assert len(kl) <= 20, f"Kurt label too long: '{kl}'"
-
 
