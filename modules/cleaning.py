@@ -486,8 +486,8 @@ def standardize_text(
         # 3. Constant columns: do not title-case constant codes / single-value columns
         elif sem_type == "constant" or orig_unique <= 1 or cleaned_series.nunique() <= 1:
             pass
-        # 4. Region and general categoricals: standardize to Title Case
-        else:
+        # 4. Region and general categoricals: standardize to Title Case if casing variants exist
+        elif cleaned_series.str.lower().nunique() < cleaned_series.nunique():
             cleaned_series = cleaned_series.str.title()
 
         # Count cells that actually changed before overwriting
@@ -585,7 +585,7 @@ def handle_outliers(
     columns: Optional[List[str]] = None,
     method: str = "iqr",
     factor: float = 3.0,
-    action: str = "clip",
+    action: str = "flag",
     group_col: Optional[str] = None,
 ) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
     """Detect and treat numerical outliers using IQR or Z-score thresholds.
@@ -599,7 +599,7 @@ def handle_outliers(
         columns: Optional list of numeric columns. If None, targets all numeric columns.
         method: Detection strategy ('iqr' or 'zscore').
         factor: Threshold multiplier (default 3.0 for extreme IQR fences, 3.0 for Z-score).
-        action: Treatment action ('clip' to cap at boundaries, 'remove', or 'nullify').
+        action: Treatment action ('flag' to flag without mutating, 'clip' to cap at boundaries, 'remove', or 'nullify').
         group_col: Optional explicit column name to group by for context-aware boundaries.
 
     Returns:
@@ -750,6 +750,8 @@ def handle_outliers(
                         cleaned_df.loc[g_mask, col] = np.nan
                     elif action == "remove":
                         cleaned_df = cleaned_df[~g_mask].copy().reset_index(drop=True)
+                    elif action == "flag":
+                        pass
 
             if total_outliers > 0:
                 min_low = round(min(lower_bounds), 4) if lower_bounds else 0.0
@@ -762,17 +764,20 @@ def handle_outliers(
                 )
                 exceeds_threshold = pct_capped > 5.0
                 flag_str = " [FLAGGED: >5% capped]" if exceeds_threshold else ""
+                rows_aff = 0 if action == "flag" else total_outliers
+                action_verb = "Flagged" if action == "flag" else "Capped"
+                ret_str = " (values retained)" if action == "flag" else ""
                 logs.append(
                     {
                         "timestamp": datetime.now().isoformat(),
                         "step": "handle_outliers",
                         "column": col,
                         "method": f"{method}_grouped_by_{active_group}",
-                        "rows_affected": total_outliers,
+                        "rows_affected": rows_aff,
                         "action": (
-                            f"Capped {total_outliers} outliers ({pct_capped}%) in '{col}' "
+                            f"{action_verb} {total_outliers} outliers ({pct_capped}%) in '{col}' "
                             f"grouped by '{active_group}' "
-                            f"[limits: {min_low} to {max_high}]{flag_str}"
+                            f"[limits: {min_low} to {max_high}]{flag_str}{ret_str}"
                         ),
                         "details": {
                             "method": method,
@@ -780,7 +785,8 @@ def handle_outliers(
                             "group_by": active_group,
                             "lower_limit": min_low,
                             "upper_limit": max_high,
-                            "outliers_treated": total_outliers,
+                            "outliers_treated": rows_aff,
+                            "outliers_flagged": total_outliers,
                             "total_rows": total_rows,
                             "percent_capped": pct_capped,
                             "capped_percent": pct_capped,
@@ -844,6 +850,35 @@ def handle_outliers(
                                 "lower_limit": round(lower_bound, 4),
                                 "upper_limit": round(upper_bound, 4),
                                 "outliers_treated": outlier_count,
+                                "total_rows": total_rows,
+                                "percent_capped": pct_treated,
+                                "capped_percent": pct_treated,
+                                "flagged_exceeds_5pct": exceeds_threshold,
+                                "action": action,
+                            },
+                        }
+                    )
+                elif action == "flag":
+                    logs.append(
+                        {
+                            "timestamp": datetime.now().isoformat(),
+                            "step": "handle_outliers",
+                            "column": col,
+                            "method": f"{method}_flagging",
+                            "rows_affected": 0,
+                            "action": (
+                                f"Flagged {outlier_count} outliers ({pct_treated}%) in '{col}' "
+                                f"using {method.upper()} "
+                                f"[limits: {round(lower_bound, 4)} to {round(upper_bound, 4)}]"
+                                f"{flag_str} (values retained)"
+                            ),
+                            "details": {
+                                "method": method,
+                                "factor": factor,
+                                "lower_limit": round(lower_bound, 4),
+                                "upper_limit": round(upper_bound, 4),
+                                "outliers_treated": 0,
+                                "outliers_flagged": outlier_count,
                                 "total_rows": total_rows,
                                 "percent_capped": pct_treated,
                                 "capped_percent": pct_treated,
@@ -1026,7 +1061,7 @@ def clean_data(
             - 'handle_outliers': bool (default True)
             - 'outlier_method': 'iqr' or 'zscore' (default 'iqr')
             - 'outlier_factor': float (default 3.0)
-            - 'outlier_action': 'clip', 'remove', 'nullify' (default 'clip')
+            - 'outlier_action': 'flag', 'clip', 'remove', 'nullify' (default 'flag')
             - 'impute_missing': bool (default True)
             - 'numeric_impute_strategy': 'median' or 'mean' (default 'median')
             - 'categorical_impute_strategy': 'mode' or 'constant' (default 'mode')
@@ -1037,6 +1072,23 @@ def clean_data(
     cfg = config or {}
     cleaned_df = df.copy(deep=True)
     audit_trail: List[Dict[str, Any]] = []
+
+    # Track top numeric pair correlation prior to cleaning
+    init_numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+    top_pair = None
+    if len(init_numeric_cols) >= 2:
+        try:
+            corr_init = df[init_numeric_cols].corr()
+            best_abs_r = -1.0
+            for i, c1 in enumerate(init_numeric_cols):
+                for j, c2 in enumerate(init_numeric_cols):
+                    if i < j:
+                        r_val = corr_init.loc[c1, c2]
+                        if not np.isnan(r_val) and abs(r_val) > best_abs_r:
+                            best_abs_r = abs(r_val)
+                            top_pair = (c1, c2, float(r_val))
+        except Exception:
+            top_pair = None
 
     # 1. Deduplication
     if cfg.get("deduplicate", True):
@@ -1080,13 +1132,13 @@ def clean_data(
         cleaned_df, neg_logs = correct_negative_anomalies(cleaned_df)
         audit_trail.extend(neg_logs)
 
-    # 8. Outliers
+    # 8. Outliers (default: flag without mutating; clips only if explicitly configured)
     if cfg.get("handle_outliers", True):
         cleaned_df, outlier_logs = handle_outliers(
             cleaned_df,
             method=cfg.get("outlier_method", "iqr"),
             factor=cfg.get("outlier_factor", 3.0),
-            action=cfg.get("outlier_action", "clip"),
+            action=cfg.get("outlier_action", "flag"),
         )
         audit_trail.extend(outlier_logs)
 
@@ -1098,5 +1150,37 @@ def clean_data(
             categorical_strategy=cfg.get("categorical_impute_strategy", "mode"),
         )
         audit_trail.extend(impute_logs)
+
+    # 10. Audit correlation before and after cleaning for top numeric pair
+    if top_pair:
+        c1, c2, r_before = top_pair
+        if c1 in cleaned_df.columns and c2 in cleaned_df.columns:
+            try:
+                sub = cleaned_df[[c1, c2]].dropna()
+                if len(sub) >= 2:
+                    r_after = float(sub.corr().iloc[0, 1])
+                    audit_trail.append(
+                        {
+                            "timestamp": datetime.now().isoformat(),
+                            "step": "correlation_audit",
+                            "column": f"{c1} vs {c2}",
+                            "method": "pearson_correlation",
+                            "rows_affected": 0,
+                            "action": (
+                                f"Audited top numeric correlation ({c1} vs {c2}): "
+                                f"before r = {r_before:.4f}, after r = {r_after:.4f} "
+                                f"(delta = {r_after - r_before:+.4f})"
+                            ),
+                            "details": {
+                                "column_1": c1,
+                                "column_2": c2,
+                                "r_before": round(r_before, 4),
+                                "r_after": round(r_after, 4),
+                                "delta": round(r_after - r_before, 4),
+                            },
+                        }
+                    )
+            except Exception:
+                pass
 
     return cleaned_df, audit_trail
