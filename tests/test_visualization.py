@@ -487,5 +487,35 @@ def test_create_pca_chart_generates_valid_plot_and_caption() -> None:
     assert len(chart["fig"].data) > 0
 
 
+def test_timeseries_chart_axis_and_caption_match_column_type_aggregation() -> None:
+    """Verify time-series chart labels axes by aggregation type ('Average Age' vs 'Daily Total Revenue')."""
+    from modules.eda import compute_timeseries_analysis
+    from modules.visualization import create_timeseries_chart
+
+    clean_path = SAMPLE_DATA_DIR / "clean_sales.csv"
+    df, _ = load_file(clean_path)
+
+    # 1. Rate / Average metric: Age
+    ts_age = compute_timeseries_analysis(df, "order_date", "age")
+    chart_age = create_timeseries_chart(ts_age)
+    assert chart_age is not None
+    assert chart_age["fig"].layout.yaxis.title.text == "Average Age"
+    assert "Average Age" in chart_age["title"]
+    assert chart_age["fig"].data[0].name == "Daily Average"
+    assert "Average Age demonstrates" in chart_age["caption"]
+    assert "a upward" not in chart_age["caption"]
+
+    # 2. Volumetric metric: Revenue
+    ts_rev = compute_timeseries_analysis(df, "order_date", "revenue")
+    chart_rev = create_timeseries_chart(ts_rev)
+    assert chart_rev is not None
+    assert chart_rev["fig"].layout.yaxis.title.text == "Daily Total Revenue"
+    assert "Revenue Trend Over Time" in chart_rev["title"]
+    assert chart_rev["fig"].data[0].name == "Daily Total"
+    assert "Daily Total Revenue demonstrates" in chart_rev["caption"]
+    assert "a upward" not in chart_rev["caption"]
+
+
+
 
 
