@@ -6,6 +6,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-21
+### Added
+- Automated statistical Exploratory Data Analysis (EDA) engine in `modules/eda.py` driven dynamically by inferred column types (excluding constant and ID-like columns).
+- Univariate statistical profiling with mean, median, std, IQR, variance, min, max, skewness, kurtosis, and normality testing (Shapiro-Wilk / D'Agostino-Pearson).
+- Distribution classification using standard skewness bands (|skew| < 0.5: approximately symmetric, 0.5–1: moderately skewed, > 1: highly skewed) and kurtosis descriptors (below -1: flat, above 1: heavy-tailed).
+- Adaptive-bin histogram computation using Freedman-Diaconis with Sturges fallback and integer-aware minimum bin width (5 to 60 bins).
+- Shared correlation matrix engine supporting Pearson and Spearman methods, with p-value computation, correlation direction/strength classification, text annotations inside heatmap cells, and optional lower-triangle rendering.
+- Bivariate hexbin/scatter plots with OLS regression lines and category mean comparisons with one-way ANOVA F-tests.
+- Categorical independence testing using Chi-Square test of independence with Cramér's V effect size.
+- 2D Principal Component Analysis (PCA) projection engine and chart mapping with explained variance ratio annotations.
+- Time-series decomposition engine with column-type-aware daily aggregation (sums for volumetric metrics; means for rates/intensities).
+- Linear trend strength classification graded by R² (< 0.3: weak, 0.3–0.6: moderate, > 0.6: strong) with grammatical article agreement and slope units.
+- Detrended multi-frequency seasonality detection (weekly 7-day and annual 365-day cycles) requiring local autocorrelation peaks and ANOVA on residuals, eliminating monthly false positives on trending series.
+- Interactive Plotly chart engine (`modules/visualization.py`) producing colorblind-safe, publication-grade figures with computed plain-English captions.
+- "📈 Exploratory Data Analysis" tab integrated into Streamlit application shell with interactive sub-tabs (Univariate, Correlations, Time-Series, and Visualizations Gallery).
+- Outlier treatment updated to default to flagging without mutating series values, preserving clean dataset values and auditing correlation deltas.
+- Unit and acceptance test suites in `tests/test_eda.py` and `tests/test_visualization.py` bringing the test suite to 107 passing tests.
+
 ## [0.2.0] - 2026-10-19
 ### Added
 - Automated, non-destructive data cleaning engine (`modules/cleaning.py`) with 19-step provenance audit log covering every transformation applied.
