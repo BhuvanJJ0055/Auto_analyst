@@ -2,7 +2,7 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-105%20passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)](tests/)
 [![Version](https://img.shields.io/badge/version-v0.2.0-blue.svg)](CHANGELOG.md)
 
 > Turn raw datasets into publication-ready dashboards, statistical audits, and plain-English business insights in seconds — with zero coding required.
@@ -156,7 +156,11 @@ black --check modules tests app.py
 Synthetic benchmark datasets are automatically generated into `sample_data/` by `scripts/make_sample_data.py`:
 - `clean_sales.csv`: 1,000 pristine transaction rows with zero data defects.
 - `messy_sales.csv`: 5,000 transaction rows with deliberate defects (140 duplicate rows, 5-15% null values across 3 columns, currency symbols, mixed date formats, outliers, negative ages, future dates, constant column, all-null column).
-- `timeseries_sales.csv`: 3 years of daily transaction volume exhibiting growth trend and seasonal cycles.
+- `timeseries_sales.csv`: 3 years of daily transaction volume (22,583 orders across 1,096 continuous days from Jan 1, 2022 to Dec 31, 2024). Note: this dataset is synthetic with deliberately pronounced multi-year growth (trend multiplier scaling up to 6.5x from initial daily baseline volume of ~5 orders/day to year 3 peak days of ~35–50 orders/day) to provide an unambiguous benchmark signal above random transaction-level item pricing variance. Real order averages by year:
+  - **2022**: 3,944 orders across 365 days = **10.81 orders/day** (avg daily revenue: ₹289,662.50)
+  - **2023**: 7,539 orders across 365 days = **20.65 orders/day** (avg daily revenue: ₹554,447.80)
+  - **2024**: 11,100 orders across 366 days = **30.33 orders/day** (avg daily revenue: ₹827,798.20)
+  - **Overall**: 20.60 orders/day across the 3-year period (2.81x increase in annual average orders/day).
 - `tiny.csv`: 50 rows for smoke and edge-case testing.
 - `sales.xlsx` & `sales.json`: Multi-format representations for ingestion validation.
 - `large.csv`: 200,000 rows for high-volume performance benchmarking (git-ignored).
