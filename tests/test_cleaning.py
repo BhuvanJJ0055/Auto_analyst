@@ -600,10 +600,11 @@ def test_cleaned_order_date_never_contains_future_dates_and_no_fabricated_defaul
     now = pd.Timestamp.now()
     valid_dates = cleaned_df["order_date"].dropna()
 
-    # Never contains any date after today
+    # Never contains any date after today; order_date.max() <= today
+    assert cleaned_df["order_date"].max() <= now, "Cleaned order_date max exceeds current time"
     assert (valid_dates <= now).all(), "Cleaned order_date contains dates occurring after today"
 
-    # Future dates are set to NaT (missing) rather than capped to an invented date.
+    # Future dates are set to NaT (missing, not forward-filled) rather than capped to an invented date.
     # With nullification, all 35 future dates become NaT, and legitimate 2024-12-31 orders
     # remain untouched at exactly 5 (rather than swelling to 40 via fabricated capping).
     assert cleaned_df["order_date"].isna().sum() == 35, "Expected 35 nullified future date entries"
@@ -618,6 +619,10 @@ def test_cleaned_order_date_never_contains_future_dates_and_no_fabricated_defaul
     assert f_log["details"]["action"] == "nullify"
     assert "missing" in f_log["action"]
 
+    # Count of NaT equals count flagged in the log
+    assert cleaned_df["order_date"].isna().sum() == f_log["details"]["dates_set_to_missing"]
+    assert cleaned_df["order_date"].isna().sum() == f_log["rows_affected"]
+
     # 2. Synthetic dataset: verify no fabricated capping date is introduced by default
     df_syn = pd.DataFrame(
         {
@@ -631,3 +636,38 @@ def test_cleaned_order_date_never_contains_future_dates_and_no_fabricated_defaul
     assert int((cleaned_syn["order_date"] == pd.Timestamp("2023-06-20")).sum()) == 1
     assert pd.isna(cleaned_syn["order_date"].iloc[2])
     assert pd.isna(cleaned_syn["order_date"].iloc[3])
+
+
+def test_clean_sales_pipeline_leaves_data_clean() -> None:
+    """Verify clean_data on clean_sales.csv leaves all values unchanged and correlations matching to 2 decimals."""
+    clean_path = SAMPLE_DATA_DIR / "clean_sales.csv"
+    df_clean, _ = load_file(clean_path)
+    cleaned_df, logs = clean_data(df_clean)
+
+    # 1. Assert values are unchanged
+    # Numeric columns must be identical
+    numeric_cols = [c for c in df_clean.columns if pd.api.types.is_numeric_dtype(df_clean[c])]
+    for col in numeric_cols:
+        pd.testing.assert_series_equal(cleaned_df[col], df_clean[col])
+
+    # Text and categorical columns must be identical
+    text_cols = [c for c in df_clean.columns if c not in numeric_cols and c != "order_date"]
+    for col in text_cols:
+        pd.testing.assert_series_equal(cleaned_df[col], df_clean[col])
+
+    # Datetime column corresponds to the exact same dates
+    assert (cleaned_df["order_date"] == pd.to_datetime(df_clean["order_date"])).all()
+
+    # 2. Assert top pair correlation (revenue vs profit) matches to 2 decimals
+    r_before = df_clean[["revenue", "profit"]].corr().iloc[0, 1]
+    r_after = cleaned_df[["revenue", "profit"]].corr().iloc[0, 1]
+    assert round(r_before, 2) == round(r_after, 2) == 0.94
+    assert np.isclose(r_before, r_after, atol=1e-4)
+
+    # 3. Assert correlation audit log entry is present
+    corr_logs = [log for log in logs if log["step"] == "correlation_audit"]
+    assert len(corr_logs) == 1
+    assert corr_logs[0]["details"]["column_1"] == "revenue"
+    assert corr_logs[0]["details"]["column_2"] == "profit"
+    assert round(corr_logs[0]["details"]["r_before"], 2) == 0.94
+    assert round(corr_logs[0]["details"]["r_after"], 2) == 0.94
