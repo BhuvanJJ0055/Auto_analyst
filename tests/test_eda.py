@@ -282,7 +282,7 @@ def test_timeseries_aggregation_per_column_type() -> None:
 
 
 def test_timeseries_detects_yearly_seasonality_on_timeseries_sales() -> None:
-    """Verify yearly seasonality (365 days) is reliably detected on timeseries_sales.csv."""
+    """Verify yearly and weekly seasonality are detected on timeseries_sales.csv, without monthly false positive."""
     ts_path = SAMPLE_DATA_DIR / "timeseries_sales.csv"
     df_ts, _ = load_file(ts_path)
 
@@ -291,6 +291,34 @@ def test_timeseries_detects_yearly_seasonality_on_timeseries_sales() -> None:
     assert res["seasonal_period"] is not None
     assert "yearly (365 days)" in res["seasonal_period"]
     assert "weekly (7 days)" in res["seasonal_period"]
+    assert "monthly (~30 days)" not in res["seasonal_period"]
+    assert res["seasonal_period"] == "weekly (7 days) & yearly (365 days)"
+
+
+def test_controlled_synthetic_timeseries_detects_weekly_and_yearly_only() -> None:
+    """Controlled synthetic series with linear trend, 7-day, and 365-day cycles only.
+
+    Asserts that exactly weekly and yearly seasonality are detected, and monthly is NOT.
+    """
+    rng = np.random.RandomState(42)
+    dates = pd.date_range("2022-01-01", periods=1000, freq="D")
+    t = np.arange(len(dates))
+    known_slope = 12.0
+    weekly_cycle = 40.0 * np.sin(2 * np.pi * t / 7)
+    yearly_cycle = 80.0 * np.cos(2 * np.pi * t / 365)
+    noise = rng.normal(0, 8.0, len(dates))
+    y = 500.0 + known_slope * t + weekly_cycle + yearly_cycle + noise
+
+    df_synth = pd.DataFrame({"order_date": dates, "revenue": y})
+    res = compute_timeseries_analysis(df_synth, "order_date", "revenue")
+
+    assert res["has_trend"] is True
+    assert "upward" in res["trend_direction"]
+    assert res["has_seasonality"] is True
+    assert "weekly (7 days)" in res["seasonal_period"]
+    assert "yearly (365 days)" in res["seasonal_period"]
+    assert "monthly (~30 days)" not in res["seasonal_period"]
+    assert res["seasonal_period"] == "weekly (7 days) & yearly (365 days)"
 
 
 def test_negative_timeseries_no_trend_no_seasonality_on_noise_and_non_seasonal_datasets() -> None:

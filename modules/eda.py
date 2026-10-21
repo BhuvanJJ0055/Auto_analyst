@@ -511,68 +511,87 @@ def compute_timeseries_analysis(
         trend_card_label = f"Flat / No trend (R² = {r2:.2f})"
         trend_summary_label = f"no clear trend (R² = {r2:.2f})"
 
-    # Multi-frequency seasonality testing (Weekly, Monthly, Yearly)
+    # Detrend the series before autocorrelation and ANOVA tests to eliminate false positives
+    fitted_trend = slope_flt * x_ordinals + intercept
+    residuals = y_values - fitted_trend
+    daily["_detrended"] = residuals
+    res_series = pd.Series(residuals)
+
+    # Multi-frequency seasonality testing (Weekly, Monthly, Yearly) on detrended series
     detected_seasonalities: List[str] = []
 
     if len(daily) >= 14:
-        # 1. Weekly seasonality (lag 7 autocorrelation or day-of-week ANOVA)
-        autocorr_7 = daily[num_col].autocorr(lag=7)
+        # 1. Weekly seasonality (lag 7 autocorrelation peak and day-of-week ANOVA on detrended residuals)
+        ac7 = res_series.autocorr(lag=7)
+        ac6 = res_series.autocorr(lag=6)
+        ac8 = res_series.autocorr(lag=8)
         daily["_dow"] = daily[dt_col].dt.dayofweek
-        dow_groups = [grp[num_col].values for _, grp in daily.groupby("_dow") if len(grp) >= 2]
+        dow_groups = [
+            grp["_detrended"].values for _, grp in daily.groupby("_dow") if len(grp) >= 2
+        ]
         dow_p = 1.0
         if len(dow_groups) >= 2:
             try:
-                _, dow_p = stats.f_oneway(*dow_groups)
+                _, p = stats.f_oneway(*dow_groups)
+                dow_p = float(p)
             except Exception:
                 dow_p = 1.0
 
-        if (not np.isnan(autocorr_7) and autocorr_7 > 0.12) or dow_p < 0.05:
+        is_weekly_peak = bool(
+            not np.isnan(ac7) and ac7 > 0.10 and ac7 > ac6 and ac7 > ac8
+        )
+        if is_weekly_peak or (dow_p < 0.01 and not np.isnan(ac7) and ac7 > 0.05):
             detected_seasonalities.append("weekly (7 days)")
 
-        # 2. Monthly seasonality (lag 28-31 autocorrelation or day-of-month ANOVA)
+        # 2. Monthly seasonality (lags 29-31, requiring clear peak and day-of-month ANOVA on residuals)
+        # Note: Lag 28 is intentionally excluded as it is the 4th harmonic of weekly seasonality.
         if len(daily) >= 60:
-            autocorr_30 = daily[num_col].autocorr(lag=30)
             daily["_dom"] = daily[dt_col].dt.day
-            dom_groups = [grp[num_col].values for _, grp in daily.groupby("_dom") if len(grp) >= 2]
+            dom_groups = [
+                grp["_detrended"].values for _, grp in daily.groupby("_dom") if len(grp) >= 2
+            ]
             dom_p = 1.0
             if len(dom_groups) >= 2:
                 try:
-                    _, dom_p = stats.f_oneway(*dom_groups)
+                    _, p = stats.f_oneway(*dom_groups)
+                    dom_p = float(p)
                 except Exception:
                     dom_p = 1.0
 
-            lag_m_max = max(
-                [
-                    daily[num_col].autocorr(lag=lag)
-                    for lag in [28, 29, 30, 31]
-                    if not np.isnan(daily[num_col].autocorr(lag=lag))
-                ]
-                or [0.0]
-            )
+            has_monthly_peak = False
+            for lag in [29, 30, 31]:
+                ac_l = res_series.autocorr(lag=lag)
+                ac_prev = res_series.autocorr(lag=lag - 1)
+                ac_next = res_series.autocorr(lag=lag + 1)
+                if not np.isnan(ac_l) and ac_l > 0.12 and ac_l > ac_prev and ac_l > ac_next:
+                    has_monthly_peak = True
+                    break
 
-            if lag_m_max > 0.10 or dom_p < 0.05 or (not np.isnan(autocorr_30) and autocorr_30 > 0.10):
+            if has_monthly_peak and (dom_p < 0.05 or ac_l > 0.20):
                 detected_seasonalities.append("monthly (~30 days)")
 
-        # 3. Yearly / Annual seasonality (month-of-year averages, ANOVA, or lag 365 autocorrelation)
+        # 3. Yearly / Annual seasonality (month-of-year ANOVA or lag 365 autocorrelation on residuals)
         if len(daily) >= 365:
             daily["_month"] = daily[dt_col].dt.month
-            month_groups = [grp[num_col].values for _, grp in daily.groupby("_month") if len(grp) >= 2]
+            month_groups = [
+                grp["_detrended"].values for _, grp in daily.groupby("_month") if len(grp) >= 2
+            ]
             month_p = 1.0
             if len(month_groups) >= 2:
                 try:
-                    _, month_p = stats.f_oneway(*month_groups)
+                    _, p = stats.f_oneway(*month_groups)
+                    month_p = float(p)
                 except Exception:
                     month_p = 1.0
 
-            # Month-of-year averages variation
-            monthly_means = daily.groupby("_month")[num_col].mean()
-            has_month_spread = False
-            if len(monthly_means) >= 6 and monthly_means.mean() > 0:
-                cv = float(monthly_means.std() / monthly_means.mean())
-                if cv > 0.10 and month_p < 0.10:
-                    has_month_spread = True
+            # Month-of-year averages spread on detrended residuals
+            monthly_res_std = daily.groupby("_month")["_detrended"].mean().std()
+            res_std = float(np.std(residuals))
+            has_month_spread = bool(
+                res_std > 0 and (monthly_res_std / res_std > 0.15) and month_p < 0.05
+            )
 
-            autocorr_365 = daily[num_col].autocorr(lag=365) if len(daily) >= 730 else np.nan
+            autocorr_365 = res_series.autocorr(lag=365) if len(daily) >= 730 else np.nan
             if month_p < 0.05 or has_month_spread or (not np.isnan(autocorr_365) and autocorr_365 > 0.10):
                 detected_seasonalities.append("yearly (365 days)")
 
