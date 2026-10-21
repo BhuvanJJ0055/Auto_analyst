@@ -1181,7 +1181,7 @@ if df_loaded is not None and ingestion_meta is not None:
                 ts_res = compute_timeseries_analysis(target_eda_df, dt_col, selected_ts_metric)
 
                 ts_col1, ts_col2, ts_col3, ts_col4 = st.columns(4)
-                ts_col1.metric("Trend Direction", ts_res["trend_direction"].title())
+                ts_col1.metric("Trend", ts_res.get("trend_card_label", ts_res["trend_direction"]))
                 ts_col2.metric("Daily Slope", f"{ts_res['trend_slope']:+.2f} / day")
                 ts_col3.metric("R² Fit", f"{ts_res['trend_r2']:.3f}")
                 ts_col4.metric("Seasonality", ts_res["seasonal_period"] or "None detected")

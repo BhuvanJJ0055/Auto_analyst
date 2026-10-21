@@ -582,6 +582,8 @@ def create_timeseries_chart(
     num_col = ts_meta["num_col"]
     d_title = dt_col.replace("_", " ").title()
     n_title = num_col.replace("_", " ").title()
+    agg_label = ts_meta.get("agg_label", "Daily Total")
+    agg_func = ts_meta.get("agg_func", "sum")
 
     # Drop NaT safely
     valid = daily_df.dropna(subset=[dt_col, num_col]).sort_values(dt_col)
@@ -590,6 +592,16 @@ def create_timeseries_chart(
 
     # Compute 7-day rolling average
     valid["_rolling_7"] = valid[num_col].rolling(window=7, min_periods=1).mean()
+
+    # Determine axis title and trace label matching aggregation semantics
+    if agg_func == "mean":
+        yaxis_title = f"{agg_label} {n_title}"
+        trace_name = f"Daily {agg_label}"
+        chart_title = f"{agg_label} {n_title} Over Time"
+    else:
+        yaxis_title = f"Daily Total {n_title}"
+        trace_name = "Daily Total"
+        chart_title = f"{n_title} Trend Over Time"
 
     fig = go.Figure()
     # Daily points / line
@@ -600,7 +612,7 @@ def create_timeseries_chart(
             mode="lines",
             line={"color": "#58A6FF", "width": 1.5},
             opacity=0.6,
-            name="Daily Total",
+            name=trace_name,
         )
     )
     # 7-day rolling average
@@ -615,28 +627,42 @@ def create_timeseries_chart(
     )
 
     fig.update_layout(
-        title=f"{n_title} Trend Over Time",
+        title=chart_title,
         xaxis_title=d_title,
-        yaxis_title=f"Daily Total {n_title}",
+        yaxis_title=yaxis_title,
         showlegend=True,
     )
     _apply_theme(fig)
 
     direction = ts_meta.get("trend_direction", "flat")
+    strength = ts_meta.get("trend_strength", "flat")
     slope = ts_meta.get("trend_slope", 0.0)
     r2 = ts_meta.get("trend_r2", 0.0)
     has_seasonality = ts_meta.get("has_seasonality", False)
     period = ts_meta.get("seasonal_period")
 
     seasonality_str = f" with identified {period} seasonality" if has_seasonality else ""
-    caption = (
-        f"{n_title} demonstrates a {direction} trend over time "
-        f"(slope = {slope:+.2f}/day, R² = {r2:.3f}){seasonality_str}."
-    )
+
+    if ts_meta.get("has_trend", False):
+        dir_clean = "upward" if slope > 0 else "downward"
+        if strength in ["weak", "moderate", "strong"]:
+            trend_phrase = f"a {strength} {dir_clean} trend (R² = {r2:.2f})"
+        else:
+            article = "an" if dir_clean == "upward" else "a"
+            trend_phrase = f"{article} {dir_clean} trend (R² = {r2:.2f})"
+        caption = (
+            f"{yaxis_title} demonstrates {trend_phrase} over time "
+            f"(slope = {slope:+.2f}/day, R² = {r2:.3f}){seasonality_str}."
+        )
+    else:
+        caption = (
+            f"{yaxis_title} demonstrates no clear trend over time "
+            f"(slope = {slope:+.2f}/day, R² = {r2:.3f}){seasonality_str}."
+        )
 
     return {
         "id": f"ts_{dt_col}_{num_col}",
-        "title": f"{n_title} Trend Over Time",
+        "title": chart_title,
         "chart_type": "timeseries",
         "fig": fig,
         "caption": caption,

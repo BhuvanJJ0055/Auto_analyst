@@ -377,12 +377,43 @@ def compute_categorical_association(
         return {"chi2": None, "p_value": None, "cramers_v": None, "significant": False}
 
 
+def get_timeseries_aggregation(metric_name: str) -> Tuple[str, str]:
+    """Determine whether a time-series metric should be aggregated by mean or sum.
+
+    Semantic rules:
+    - 'mean' for rate, average, intensity, or bounded columns: age, rating, discount, margin, price, percentage.
+    - 'sum' for volumetric throughput / accumulator columns: revenue, profit, quantity, sales, cost, units, orders.
+
+    Args:
+        metric_name: Name of the numeric metric column.
+
+    Returns:
+        Tuple of (agg_function, agg_display_label), e.g. ('mean', 'Average') or ('sum', 'Daily Total').
+    """
+    name_lower = metric_name.lower()
+    mean_keywords = [
+        "age", "rating", "discount", "margin", "price", "unit_price",
+        "score", "ratio", "pct", "percent", "percentage", "average", "avg", "rate"
+    ]
+    sum_keywords = [
+        "revenue", "profit", "quantity", "sales", "cost", "unit", "units",
+        "order", "orders", "volume", "total", "count", "amount"
+    ]
+    for kw in mean_keywords:
+        if kw in name_lower:
+            return "mean", "Average"
+    for kw in sum_keywords:
+        if kw in name_lower:
+            return "sum", "Daily Total"
+    return "sum", "Daily Total"
+
+
 def compute_timeseries_analysis(
     df: pd.DataFrame, dt_col: str, num_col: str
 ) -> Dict[str, Any]:
     """Decompose and evaluate time-series trends, seasonality, and rolling statistics.
 
-    Safely skips NaT date entries.
+    Safely skips NaT date entries. Aggregates daily by mean or sum based on metric semantics.
 
     Args:
         df: Input DataFrame.
@@ -400,13 +431,20 @@ def compute_timeseries_analysis(
     valid = sub_df.dropna().sort_values(dt_col)
     n = len(valid)
 
+    agg_func, agg_label = get_timeseries_aggregation(num_col)
+
     if n < 5:
         return {
             "dt_col": dt_col,
             "num_col": num_col,
+            "agg_func": agg_func,
+            "agg_label": agg_label,
             "count": n,
             "has_trend": False,
             "trend_direction": "flat",
+            "trend_strength": "flat",
+            "trend_card_label": "Flat / No trend (R² = 0.00)",
+            "trend_summary_label": "no clear trend (R² = 0.00)",
             "trend_slope": 0.0,
             "trend_r2": 0.0,
             "trend_pvalue": 1.0,
@@ -415,16 +453,24 @@ def compute_timeseries_analysis(
             "resampled_daily": pd.DataFrame(),
         }
 
-    # Aggregate by date (daily sum for volumetric throughput, also tracking daily mean)
-    daily = valid.set_index(dt_col).resample("D")[num_col].sum().dropna().reset_index()
+    # Aggregate by date according to metric semantics (mean for rates/averages; sum for volumes)
+    if agg_func == "mean":
+        daily = valid.set_index(dt_col).resample("D")[num_col].mean().dropna().reset_index()
+    else:
+        daily = valid.set_index(dt_col).resample("D")[num_col].sum().dropna().reset_index()
 
     if len(daily) < 5:
         return {
             "dt_col": dt_col,
             "num_col": num_col,
+            "agg_func": agg_func,
+            "agg_label": agg_label,
             "count": n,
             "has_trend": False,
             "trend_direction": "flat",
+            "trend_strength": "flat",
+            "trend_card_label": "Flat / No trend (R² = 0.00)",
+            "trend_summary_label": "no clear trend (R² = 0.00)",
             "trend_slope": 0.0,
             "trend_r2": 0.0,
             "trend_pvalue": 1.0,
@@ -446,7 +492,7 @@ def compute_timeseries_analysis(
     # R² < 0.3: weak
     # 0.3 ≤ R² ≤ 0.6: moderate
     # R² > 0.6: strong
-    if r2 >= 0.6:
+    if r2 > 0.6:
         trend_strength = "strong"
     elif r2 >= 0.3:
         trend_strength = "moderate"
@@ -457,9 +503,13 @@ def compute_timeseries_analysis(
     if has_trend:
         direction = "upward" if slope_flt > 0 else "downward"
         trend_direction = f"{trend_strength} {direction}"
+        trend_card_label = f"{trend_strength.capitalize()} {direction} trend (R² = {r2:.2f})"
+        trend_summary_label = f"{trend_strength} {direction} trend (R² = {r2:.2f})"
     else:
         trend_direction = "flat"
         trend_strength = "flat"
+        trend_card_label = f"Flat / No trend (R² = {r2:.2f})"
+        trend_summary_label = f"no clear trend (R² = {r2:.2f})"
 
     # Multi-frequency seasonality testing (Weekly, Monthly, Yearly)
     detected_seasonalities: List[str] = []
@@ -476,10 +526,10 @@ def compute_timeseries_analysis(
             except Exception:
                 dow_p = 1.0
 
-        if (not np.isnan(autocorr_7) and autocorr_7 > 0.15) or dow_p < 0.05:
+        if (not np.isnan(autocorr_7) and autocorr_7 > 0.12) or dow_p < 0.05:
             detected_seasonalities.append("weekly (7 days)")
 
-        # 2. Monthly seasonality (lag 30 autocorrelation or day-of-month ANOVA)
+        # 2. Monthly seasonality (lag 28-31 autocorrelation or day-of-month ANOVA)
         if len(daily) >= 60:
             autocorr_30 = daily[num_col].autocorr(lag=30)
             daily["_dom"] = daily[dt_col].dt.day
@@ -491,10 +541,19 @@ def compute_timeseries_analysis(
                 except Exception:
                     dom_p = 1.0
 
-            if (not np.isnan(autocorr_30) and autocorr_30 > 0.15) or dom_p < 0.05:
+            lag_m_max = max(
+                [
+                    daily[num_col].autocorr(lag=lag)
+                    for lag in [28, 29, 30, 31]
+                    if not np.isnan(daily[num_col].autocorr(lag=lag))
+                ]
+                or [0.0]
+            )
+
+            if lag_m_max > 0.10 or dom_p < 0.05 or (not np.isnan(autocorr_30) and autocorr_30 > 0.10):
                 detected_seasonalities.append("monthly (~30 days)")
 
-        # 3. Yearly / Annual seasonality (month-of-year ANOVA or lag 365 autocorrelation)
+        # 3. Yearly / Annual seasonality (month-of-year averages, ANOVA, or lag 365 autocorrelation)
         if len(daily) >= 365:
             daily["_month"] = daily[dt_col].dt.month
             month_groups = [grp[num_col].values for _, grp in daily.groupby("_month") if len(grp) >= 2]
@@ -505,8 +564,16 @@ def compute_timeseries_analysis(
                 except Exception:
                     month_p = 1.0
 
+            # Month-of-year averages variation
+            monthly_means = daily.groupby("_month")[num_col].mean()
+            has_month_spread = False
+            if len(monthly_means) >= 6 and monthly_means.mean() > 0:
+                cv = float(monthly_means.std() / monthly_means.mean())
+                if cv > 0.10 and month_p < 0.10:
+                    has_month_spread = True
+
             autocorr_365 = daily[num_col].autocorr(lag=365) if len(daily) >= 730 else np.nan
-            if month_p < 0.05 or (not np.isnan(autocorr_365) and autocorr_365 > 0.15):
+            if month_p < 0.05 or has_month_spread or (not np.isnan(autocorr_365) and autocorr_365 > 0.10):
                 detected_seasonalities.append("yearly (365 days)")
 
     has_seasonality = len(detected_seasonalities) > 0
@@ -515,10 +582,14 @@ def compute_timeseries_analysis(
     return {
         "dt_col": dt_col,
         "num_col": num_col,
+        "agg_func": agg_func,
+        "agg_label": agg_label,
         "count": n,
         "has_trend": has_trend,
         "trend_direction": trend_direction,
         "trend_strength": trend_strength,
+        "trend_card_label": trend_card_label,
+        "trend_summary_label": trend_summary_label,
         "trend_slope": slope_flt,
         "trend_r2": r2,
         "trend_pvalue": p_val_flt,
