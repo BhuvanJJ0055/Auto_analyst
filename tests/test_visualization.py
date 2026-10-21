@@ -504,6 +504,8 @@ def test_timeseries_chart_axis_and_caption_match_column_type_aggregation() -> No
     assert chart_age["fig"].data[0].name == "Daily Average"
     assert "Average Age demonstrates" in chart_age["caption"]
     assert "a upward" not in chart_age["caption"]
+    assert chart_age["caption"].count("R²") == 1
+    assert "yrs/day" in chart_age["caption"]
 
     # 2. Volumetric metric: Revenue
     ts_rev = compute_timeseries_analysis(df, "order_date", "revenue")
@@ -514,6 +516,8 @@ def test_timeseries_chart_axis_and_caption_match_column_type_aggregation() -> No
     assert chart_rev["fig"].data[0].name == "Daily Total"
     assert "Daily Total Revenue demonstrates" in chart_rev["caption"]
     assert "a upward" not in chart_rev["caption"]
+    assert chart_rev["caption"].count("R²") == 1
+    assert "₹" in chart_rev["caption"]
 
 
 

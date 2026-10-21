@@ -570,6 +570,26 @@ def create_grouped_bar(
     }
 
 
+def _format_slope(slope: float, col_name: str) -> str:
+    """Format time-series slope with appropriate sign and currency/unit."""
+    col_lower = col_name.lower()
+    monetary_keywords = [
+        "revenue", "profit", "sales", "price", "cost", "income", "amount", "spend", "fee"
+    ]
+    is_monetary = any(kw in col_lower for kw in monetary_keywords)
+    sign = "+" if slope >= 0 else "-"
+    abs_slope = abs(slope)
+
+    if is_monetary:
+        return f"{sign}₹{abs_slope:,.2f}"
+    elif "age" in col_lower:
+        return f"{sign}{abs_slope:.2f} yrs"
+    elif any(kw in col_lower for kw in ["quantity", "unit", "orders", "volume"]):
+        return f"{sign}{abs_slope:,.2f} units"
+    else:
+        return f"{sign}{abs_slope:.2f}"
+
+
 def create_timeseries_chart(
     ts_meta: Dict[str, Any]
 ) -> Optional[Dict[str, Any]]:
@@ -641,23 +661,24 @@ def create_timeseries_chart(
     has_seasonality = ts_meta.get("has_seasonality", False)
     period = ts_meta.get("seasonal_period")
 
+    slope_str = _format_slope(slope, num_col)
     seasonality_str = f" with identified {period} seasonality" if has_seasonality else ""
 
     if ts_meta.get("has_trend", False):
         dir_clean = "upward" if slope > 0 else "downward"
         if strength in ["weak", "moderate", "strong"]:
-            trend_phrase = f"a {strength} {dir_clean} trend (R² = {r2:.2f})"
+            trend_phrase = f"a {strength} {dir_clean} trend"
         else:
             article = "an" if dir_clean == "upward" else "a"
-            trend_phrase = f"{article} {dir_clean} trend (R² = {r2:.2f})"
+            trend_phrase = f"{article} {dir_clean} trend"
         caption = (
             f"{yaxis_title} demonstrates {trend_phrase} over time "
-            f"(slope = {slope:+.2f}/day, R² = {r2:.3f}){seasonality_str}."
+            f"(slope = {slope_str}/day, R² = {r2:.2f}){seasonality_str}."
         )
     else:
         caption = (
             f"{yaxis_title} demonstrates no clear trend over time "
-            f"(slope = {slope:+.2f}/day, R² = {r2:.3f}){seasonality_str}."
+            f"(slope = {slope_str}/day, R² = {r2:.2f}){seasonality_str}."
         )
 
     return {
