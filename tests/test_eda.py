@@ -293,6 +293,39 @@ def test_timeseries_detects_yearly_seasonality_on_timeseries_sales() -> None:
     assert "weekly (7 days)" in res["seasonal_period"]
 
 
+def test_negative_timeseries_no_trend_no_seasonality_on_noise_and_non_seasonal_datasets() -> None:
+    """Verify negative cases: random noise reports no trend and no seasonality, and clean/messy sales do not report yearly seasonality."""
+    # 1. Pure random Gaussian noise across 400 days
+    np.random.seed(42)
+    dates_noise = pd.date_range("2023-01-01", periods=400, freq="D")
+    df_noise = pd.DataFrame({
+        "order_date": dates_noise,
+        "metric": np.random.normal(loc=100.0, scale=15.0, size=400),
+    })
+    res_noise = compute_timeseries_analysis(df_noise, "order_date", "metric")
+    assert res_noise["has_trend"] is False
+    assert res_noise["trend_direction"] == "flat"
+    assert res_noise["has_seasonality"] is False
+    assert res_noise["seasonal_period"] is None
+
+    # 2. clean_sales.csv does not have yearly seasonality
+    df_clean, _ = load_file(SAMPLE_DATA_DIR / "clean_sales.csv")
+    res_clean = compute_timeseries_analysis(df_clean, "order_date", "revenue")
+    if res_clean["has_seasonality"] and res_clean["seasonal_period"]:
+        assert "yearly (365 days)" not in res_clean["seasonal_period"]
+    else:
+        assert res_clean["seasonal_period"] is None
+
+    # 3. messy_sales.csv (cleaned) does not have yearly seasonality
+    df_messy, _ = load_file(SAMPLE_DATA_DIR / "messy_sales.csv")
+    cleaned_messy, _ = clean_data(df_messy)
+    res_messy = compute_timeseries_analysis(cleaned_messy, "order_date", "revenue")
+    if res_messy["has_seasonality"] and res_messy["seasonal_period"]:
+        assert "yearly (365 days)" not in res_messy["seasonal_period"]
+    else:
+        assert res_messy["seasonal_period"] is None
+
+
 
 def test_eda_on_single_numeric_column_dataset_does_not_crash() -> None:
     """Verify dataset with only a single numeric column does not crash and handles correlations gracefully."""
