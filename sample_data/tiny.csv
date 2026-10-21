@@ -1,51 +1,51 @@
 order_id,order_date,region,state,category,product,gender,age,quantity,unit_price,discount,revenue,profit,customer_rating
-ORD-000001,2024-07-19,North,Haryana,Furniture,Ergonomic Mesh Chair,Non-Binary,45,1,12612.19,5.0,11981.58,2537.97,3.0
-ORD-000002,2022-10-08,North,Punjab,Technology,Smartphone 5G,Female,33,2,30157.94,0.0,60315.88,12312.2,4.0
-ORD-000003,2024-01-20,North,Punjab,Furniture,Modular Bookshelf,Non-Binary,30,3,9171.13,5.0,26137.72,6574.21,4.0
-ORD-000004,2023-09-21,West,Gujarat,Furniture,Executive Leather Sofa,Male,50,1,35934.9,15.0,30544.67,5804.5,5.0
-ORD-000005,2024-09-24,East,Assam,Clothing,Premium Cotton T-Shirt,Non-Binary,24,1,1127.8,10.0,1015.02,154.68,4.0
-ORD-000006,2023-11-14,West,Rajasthan,Technology,Smartphone 5G,Non-Binary,27,2,33272.55,0.0,66545.1,16356.43,4.0
-ORD-000007,2024-05-23,East,West Bengal,Clothing,Fleece Hooded Sweatshirt,Female,54,2,3231.71,0.0,6463.42,1653.0,4.0
-ORD-000008,2022-01-19,North,Uttar Pradesh,Office Supplies,Magnetic Whiteboard,Male,61,1,2953.59,20.0,2362.87,515.78,4.0
-ORD-000009,2024-11-01,North,Delhi,Clothing,Premium Cotton T-Shirt,Female,22,6,1276.25,0.0,7657.5,1074.87,4.0
-ORD-000010,2024-12-11,South,Kerala,Technology,Laptop Pro,Female,44,4,65916.68,0.0,263666.72,49397.9,4.0
-ORD-000011,2024-05-12,West,Gujarat,Technology,Smartphone 5G,Female,53,3,30055.72,5.0,85658.8,28093.16,4.0
-ORD-000012,2024-10-08,East,West Bengal,Technology,Wireless Earbuds,Non-Binary,56,2,4544.14,5.0,8633.87,3060.86,4.0
-ORD-000013,2024-01-12,South,Karnataka,Furniture,Executive Leather Sofa,Male,62,1,34524.24,15.0,29345.6,4257.97,3.0
-ORD-000014,2024-01-07,East,Assam,Office Supplies,Heavy-Duty Binder,Female,61,2,323.83,0.0,647.66,139.95,1.0
-ORD-000015,2022-06-28,North,Uttar Pradesh,Technology,Smart Fitness Watch,Non-Binary,45,2,6331.8,5.0,12030.42,3235.9,1.0
-ORD-000016,2022-12-24,North,Uttar Pradesh,Technology,Smartphone 5G,Non-Binary,46,2,33175.13,0.0,66350.26,21039.93,4.0
-ORD-000017,2024-02-07,South,Telangana,Furniture,LED Desk Lamp,Female,48,2,2187.19,5.0,4155.66,987.3,3.0
-ORD-000018,2024-04-28,West,Gujarat,Office Supplies,Steel Stapler Set,Male,35,2,638.32,5.0,1212.81,459.99,4.0
-ORD-000019,2023-12-04,West,Goa,Clothing,Slim-fit Denim Jeans,Female,19,1,2763.41,5.0,2625.24,862.89,4.0
-ORD-000020,2022-06-27,North,Punjab,Clothing,Premium Cotton T-Shirt,Female,48,2,1277.85,0.0,2555.7,445.8,4.0
-ORD-000021,2024-08-10,West,Gujarat,Clothing,Fleece Hooded Sweatshirt,Male,43,4,2898.68,10.0,10435.25,1736.4,4.0
-ORD-000022,2023-03-06,East,West Bengal,Technology,Smart Fitness Watch,Non-Binary,64,2,6078.67,5.0,11549.47,3784.31,3.0
-ORD-000023,2024-11-24,East,Bihar,Clothing,Premium Cotton T-Shirt,Female,24,1,1223.56,0.0,1223.56,409.91,4.0
-ORD-000024,2022-03-13,East,Bihar,Clothing,Fleece Hooded Sweatshirt,Female,31,8,2981.68,5.0,22660.77,3931.99,5.0
-ORD-000025,2022-07-23,North,Uttar Pradesh,Office Supplies,Executive Rollerball Pen,Male,41,5,809.19,0.0,4045.95,1484.1,4.0
-ORD-000026,2024-07-02,West,Goa,Office Supplies,Magnetic Whiteboard,Non-Binary,53,1,3236.2,15.0,2750.77,653.11,5.0
-ORD-000027,2023-08-20,East,Odisha,Furniture,Ergonomic Mesh Chair,Non-Binary,20,1,11579.32,10.0,10421.39,3234.46,4.0
-ORD-000028,2022-09-13,South,Telangana,Technology,Laptop Pro,Female,22,1,66363.43,0.0,66363.43,8766.73,2.0
-ORD-000029,2024-08-15,West,Goa,Furniture,Motorized Standing Desk,Male,43,3,23189.55,10.0,62611.79,23684.92,4.0
-ORD-000030,2023-05-05,North,Uttar Pradesh,Clothing,Wrinkle-Free Formal Shirt,Male,23,1,2335.63,0.0,2335.63,451.0,4.0
-ORD-000031,2023-11-18,East,Bihar,Technology,Smartphone 5G,Female,34,1,30468.23,20.0,24374.58,4857.09,5.0
-ORD-000032,2022-04-10,South,Kerala,Furniture,Modular Bookshelf,Female,53,2,8244.01,10.0,14839.22,1945.35,5.0
-ORD-000033,2023-02-14,East,Bihar,Technology,Laptop Pro,Female,25,1,69942.99,0.0,69942.99,15258.74,4.0
-ORD-000034,2023-02-26,East,Bihar,Technology,Smart Fitness Watch,Non-Binary,28,1,5817.09,0.0,5817.09,1393.54,5.0
-ORD-000035,2022-04-04,East,Odisha,Technology,Smartphone 5G,Female,42,2,30714.9,0.0,61429.8,12419.2,2.0
-ORD-000036,2024-07-06,East,Odisha,Technology,Smartphone 5G,Non-Binary,50,1,31904.03,10.0,28713.63,6827.17,4.0
-ORD-000037,2023-03-16,South,Kerala,Office Supplies,Steel Stapler Set,Male,18,1,560.37,10.0,504.33,128.6,4.0
-ORD-000038,2022-03-13,West,Maharashtra,Furniture,Modular Bookshelf,Non-Binary,28,2,7888.9,10.0,14200.02,2982.65,4.0
-ORD-000039,2022-03-30,North,Haryana,Clothing,Fleece Hooded Sweatshirt,Non-Binary,40,2,3238.01,0.0,6476.02,1407.22,5.0
-ORD-000040,2024-02-21,East,Bihar,Clothing,Fleece Hooded Sweatshirt,Female,55,3,2997.17,0.0,8991.51,1897.02,4.0
-ORD-000041,2022-02-20,East,Odisha,Furniture,Executive Leather Sofa,Female,64,1,33015.03,0.0,33015.03,4441.92,3.0
-ORD-000042,2022-09-21,South,Tamil Nadu,Office Supplies,Recycled Paper Ream,Non-Binary,52,2,475.73,0.0,951.46,261.34,5.0
-ORD-000043,2023-07-08,East,West Bengal,Technology,Smartphone 5G,Female,50,3,34104.12,0.0,102312.36,30494.69,4.0
-ORD-000044,2024-04-08,East,Bihar,Technology,Laptop Pro,Non-Binary,52,1,68868.34,5.0,65424.92,18086.94,4.0
-ORD-000045,2024-08-17,South,Kerala,Office Supplies,Heavy-Duty Binder,Male,23,1,334.88,10.0,301.39,39.26,1.0
-ORD-000046,2023-03-14,South,Karnataka,Furniture,LED Desk Lamp,Female,21,2,2197.85,20.0,3516.56,954.31,4.0
-ORD-000047,2022-08-15,East,West Bengal,Technology,Laptop Pro,Non-Binary,45,2,63481.65,0.0,126963.3,39774.92,4.0
-ORD-000048,2023-10-12,North,Haryana,Furniture,Ergonomic Mesh Chair,Non-Binary,43,3,12389.09,0.0,37167.27,5167.87,1.0
-ORD-000049,2024-05-29,South,Kerala,Furniture,Ergonomic Mesh Chair,Female,31,1,11948.49,0.0,11948.49,1931.39,1.0
-ORD-000050,2022-01-25,West,Rajasthan,Furniture,Motorized Standing Desk,Female,28,2,23911.44,5.0,45431.74,10398.81,5.0
+ORD-000001,2024-10-14,North,Punjab,Furniture,Motorized Standing Desk,Male,32,3,23287.1,10.0,62875.17,18370.06,4.0
+ORD-000002,2024-09-02,North,Punjab,Furniture,Motorized Standing Desk,Male,35,5,23794.72,0.0,118973.6,37155.43,4.0
+ORD-000003,2023-06-22,East,Assam,Technology,Ultra-wide Monitor,Non-Binary,40,1,26135.71,20.0,20908.57,3247.93,4.0
+ORD-000004,2023-06-12,East,West Bengal,Office Supplies,Steel Stapler Set,Male,48,3,573.39,10.0,1548.15,563.71,4.0
+ORD-000005,2023-08-05,East,Bihar,Technology,Smart Fitness Watch,Female,34,4,6036.1,5.0,22937.18,5149.37,3.0
+ORD-000006,2023-01-29,South,Telangana,Office Supplies,Magnetic Whiteboard,Female,26,1,3040.74,15.0,2584.63,805.96,4.0
+ORD-000007,2024-05-20,West,Rajasthan,Clothing,Breathable Running Shoes,Non-Binary,20,1,4351.4,15.0,3698.69,772.6,4.0
+ORD-000008,2023-03-06,East,Assam,Furniture,LED Desk Lamp,Female,37,1,2236.11,0.0,2236.11,347.56,4.0
+ORD-000009,2024-03-07,West,Goa,Clothing,Slim-fit Denim Jeans,Female,59,5,2684.94,10.0,12082.23,4481.37,5.0
+ORD-000010,2022-10-30,South,Kerala,Office Supplies,Heavy-Duty Binder,Female,23,5,331.54,15.0,1409.04,388.71,5.0
+ORD-000011,2022-01-11,South,Tamil Nadu,Furniture,Ergonomic Mesh Chair,Non-Binary,56,1,12212.1,20.0,9769.68,1854.62,4.0
+ORD-000012,2023-05-27,South,Tamil Nadu,Clothing,Wrinkle-Free Formal Shirt,Male,43,2,2157.24,0.0,4314.48,662.13,2.0
+ORD-000013,2022-05-12,West,Rajasthan,Clothing,Breathable Running Shoes,Female,54,3,4478.86,0.0,13436.58,2998.52,5.0
+ORD-000014,2024-06-21,West,Gujarat,Furniture,Ergonomic Mesh Chair,Male,21,3,12039.13,10.0,32505.65,11966.19,5.0
+ORD-000015,2023-12-06,East,West Bengal,Technology,Smartphone 5G,Male,66,2,32554.36,0.0,65108.72,20401.93,4.0
+ORD-000016,2022-09-01,South,Kerala,Furniture,Ergonomic Mesh Chair,Male,27,1,11511.01,10.0,10359.91,1362.82,4.0
+ORD-000017,2022-11-17,East,Bihar,Furniture,LED Desk Lamp,Female,62,2,2086.19,5.0,3963.76,994.01,5.0
+ORD-000018,2022-10-05,North,Punjab,Clothing,Wrinkle-Free Formal Shirt,Male,54,1,2323.25,5.0,2207.09,317.38,4.0
+ORD-000019,2024-12-11,East,Bihar,Office Supplies,Executive Rollerball Pen,Female,56,4,831.34,5.0,3159.09,937.87,5.0
+ORD-000020,2024-08-13,South,Tamil Nadu,Furniture,Executive Leather Sofa,Non-Binary,52,2,36324.77,0.0,72649.54,27550.25,4.0
+ORD-000021,2023-02-05,West,Goa,Office Supplies,Heavy-Duty Binder,Male,40,2,374.84,15.0,637.23,109.58,5.0
+ORD-000022,2023-12-23,South,Kerala,Technology,Ultra-wide Monitor,Non-Binary,34,1,26229.28,0.0,26229.28,3837.62,4.0
+ORD-000023,2022-07-09,West,Goa,Office Supplies,Executive Rollerball Pen,Female,61,2,823.34,0.0,1646.68,401.79,1.0
+ORD-000024,2022-03-25,North,Delhi,Office Supplies,Heavy-Duty Binder,Non-Binary,63,5,356.24,0.0,1781.2,590.32,3.0
+ORD-000025,2024-04-08,East,Odisha,Office Supplies,Executive Rollerball Pen,Non-Binary,26,1,843.74,25.0,632.8,203.06,2.0
+ORD-000026,2023-02-08,South,Karnataka,Furniture,Modular Bookshelf,Male,20,1,8697.22,15.0,7392.64,1835.05,2.0
+ORD-000027,2023-08-09,South,Karnataka,Technology,Wireless Earbuds,Non-Binary,42,2,4678.47,10.0,8421.25,2576.92,4.0
+ORD-000028,2023-02-23,West,Gujarat,Technology,Laptop Pro,Male,20,1,67943.75,0.0,67943.75,11164.74,5.0
+ORD-000029,2023-07-15,North,Haryana,Office Supplies,Heavy-Duty Binder,Female,45,2,338.92,5.0,643.95,226.33,4.0
+ORD-000030,2023-09-20,North,Uttar Pradesh,Office Supplies,Heavy-Duty Binder,Non-Binary,56,2,356.58,10.0,641.84,137.99,4.0
+ORD-000031,2024-09-20,South,Karnataka,Furniture,LED Desk Lamp,Non-Binary,56,3,2069.29,0.0,6207.87,2001.71,4.0
+ORD-000032,2024-09-14,South,Telangana,Furniture,Motorized Standing Desk,Male,38,1,25478.69,15.0,21656.89,5851.44,4.0
+ORD-000033,2023-11-24,West,Gujarat,Office Supplies,Steel Stapler Set,Non-Binary,60,8,621.66,20.0,3978.62,1136.85,4.0
+ORD-000034,2022-09-03,North,Delhi,Furniture,Motorized Standing Desk,Female,28,1,25876.08,5.0,24582.28,7171.13,4.0
+ORD-000035,2023-08-17,South,Karnataka,Furniture,Executive Leather Sofa,Male,22,1,36067.27,10.0,32460.54,4272.88,2.0
+ORD-000036,2023-01-31,West,Goa,Furniture,LED Desk Lamp,Male,50,3,2285.51,5.0,6513.7,854.79,4.0
+ORD-000037,2022-05-01,West,Gujarat,Clothing,Premium Cotton T-Shirt,Non-Binary,41,1,1136.18,10.0,1022.56,385.76,4.0
+ORD-000038,2024-06-13,West,Goa,Clothing,Fleece Hooded Sweatshirt,Male,25,2,3058.86,10.0,5505.95,1577.52,4.0
+ORD-000039,2024-05-06,South,Telangana,Technology,Smart Fitness Watch,Female,67,2,6438.72,0.0,12877.44,1572.58,5.0
+ORD-000040,2024-12-05,East,Odisha,Office Supplies,Executive Rollerball Pen,Male,40,1,900.89,10.0,810.8,141.46,4.0
+ORD-000041,2024-06-06,North,Punjab,Furniture,LED Desk Lamp,Female,30,2,2160.15,0.0,4320.3,1208.16,5.0
+ORD-000042,2024-07-28,North,Delhi,Technology,Laptop Pro,Male,53,1,60300.14,10.0,54270.13,10140.63,4.0
+ORD-000043,2024-03-23,North,Delhi,Office Supplies,Recycled Paper Ream,Non-Binary,53,3,415.76,5.0,1184.92,247.61,4.0
+ORD-000044,2024-01-05,South,Kerala,Office Supplies,Steel Stapler Set,Non-Binary,58,1,554.59,5.0,526.86,164.46,4.0
+ORD-000045,2023-07-25,South,Telangana,Furniture,Motorized Standing Desk,Male,23,2,25212.55,0.0,50425.1,8411.56,4.0
+ORD-000046,2024-05-18,South,Tamil Nadu,Clothing,Premium Cotton T-Shirt,Female,50,1,1191.05,0.0,1191.05,341.81,4.0
+ORD-000047,2022-03-08,South,Telangana,Furniture,LED Desk Lamp,Male,45,1,2163.93,0.0,2163.93,369.45,4.0
+ORD-000048,2022-01-15,East,Assam,Technology,Smart Fitness Watch,Non-Binary,47,2,5910.71,0.0,11821.42,2919.03,4.0
+ORD-000049,2022-06-08,West,Maharashtra,Furniture,Motorized Standing Desk,Non-Binary,58,8,25504.44,5.0,193833.74,28103.13,4.0
+ORD-000050,2022-06-12,East,West Bengal,Furniture,Executive Leather Sofa,Female,45,1,33876.64,15.0,28795.14,8413.78,4.0

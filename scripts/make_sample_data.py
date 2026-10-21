@@ -225,17 +225,18 @@ def make_timeseries_sales() -> pd.DataFrame:
     records = []
     order_num = 1
     for day_idx, d in enumerate(dates):
-        # Base daily order volume: strong growth trend + weekly boost + prominent annual cycle
+        # Base daily order volume: steady growth trend + weekend boost + smooth continuous annual cycle
         day_of_week = d.weekday()
         weekend_boost = 1.25 if day_of_week in [5, 6] else 1.0
-        annual_cycle = 1.0 + 0.35 * np.sin(2 * np.pi * d.timetuple().tm_yday / 365.25)
-        trend = 1.0 + (7.0 * (day_idx / 1096.0))  # Strong steady growth across 3 years
-        q4_holiday_spike = 1.35 if d.month in [10, 11, 12] else 1.0
+        # Continuous annual cycle peaking around late November/early December (day 335)
+        # and tapering smoothly into January, avoiding an artificial step-function spike at year-end
+        annual_cycle = 1.0 + 0.35 * np.cos(2 * np.pi * (d.timetuple().tm_yday - 335) / 365.25)
+        trend = 1.0 + (5.5 * (day_idx / 1096.0))  # Steady growth across 3 years
 
         daily_volume = max(
             2,
             int(
-                np.random.poisson(lam=4 * weekend_boost * annual_cycle * trend * q4_holiday_spike)
+                np.random.poisson(lam=5 * weekend_boost * annual_cycle * trend)
             ),
         )
 
